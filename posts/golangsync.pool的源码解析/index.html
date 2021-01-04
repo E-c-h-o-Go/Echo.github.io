@@ -5,8 +5,8 @@
 	<meta charset="UTF-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
 	<meta http-equiv="X-UA-Compatible" content="ie=edge">
-	<meta name="theme-color" content="#494f5c">
-	<meta name="msapplication-TileColor" content="#494f5c">
+	<meta name="theme-color" content="#EAEAEA">
+	<meta name="msapplication-TileColor" content="#EAEAEA">
 <meta itemprop="name" content="「Golang」sync.Pool的源码解">
 <meta itemprop="description" content="前言 在平时我们的业务逻辑中，会出现多次，重复的申请在堆上创建的对象用作他用，当并发量不大的时候，可能往往并不会产生一些什么问题，当时一旦当并发量增长的时候就会发现因为重复在堆上创建对象导致了GC的扫描时间与STW（stop-the-world）很长，导致程序性能的降低，因为大量地创建在堆上的对象，也会影响垃圾回收标记的时间，因此来说频繁的在堆上申请对象说对高并发量的程序性能会产生很大的影响。
 此时我们可以采用对象池的方式，去针对某些频繁的且大量重复申请的对象预先的创建或者将用完的对象放回对象池中，以便下回使用的时候免去了重新申请内存的问题，这样就有利于减少业务的耗时，还能提高程序的整体性能。 对象池是一种设计模式也是一种性能优化的方式，对象池（对象池模式）的概念如下：

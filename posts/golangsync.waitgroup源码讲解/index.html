@@ -5,8 +5,8 @@
 	<meta charset="UTF-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
 	<meta http-equiv="X-UA-Compatible" content="ie=edge">
-	<meta name="theme-color" content="#494f5c">
-	<meta name="msapplication-TileColor" content="#494f5c">
+	<meta name="theme-color" content="#EAEAEA">
+	<meta name="msapplication-TileColor" content="#EAEAEA">
 <meta itemprop="name" content="「Golang」sync.WaitGroup源码讲解.md">
 <meta itemprop="description" content="sync.WaitGroup介绍 当我们在开发过程中，经常需要在开启多个goroutine后，等待全部的goroutine执行完毕后才进行下一步的业务逻辑执行。此时我们可能会采用轮询的方式去定时侦测已经开启的多个goroutine的业务是否执行完毕，但是这样性能很低，并且持续占用cpu时间片很消耗cpu的资源，此时我们就该使用sync.WaitGroup来完成此次操作。举个🌰，下列代码是开了10个goroutine后等待其各睡眠5秒之后进行后续操作的sync.WaitGroup方法实现。
 func main() { // 创建对象 	var wait sync.WaitGroup for i := 0; i &lt; 10; i&#43;&#43; { // 为需要等待结束的goroutine数量&#43;1 	wait.Add(1) go func() { time.Sleep(5*time.Second) // 结束 使得需要等待的数量-1 	// 等同于 wait.Add(-1) 	wait.Done() }() } // 等待所有执行完毕 	wait.Wait() fmt.Println(&#34;wait done&#34;) } 上述代码的睡眠5秒可以替换为任何需要在goroutine中执行的业务逻辑，上述代码中出现了下述几个sync.WaitGroup中提供的方法，提供方法很少很简洁，接下来就开始解析一下sync.WaitGroup的相关信息。

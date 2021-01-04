@@ -5,8 +5,8 @@
 	<meta charset="UTF-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
 	<meta http-equiv="X-UA-Compatible" content="ie=edge">
-	<meta name="theme-color" content="#494f5c">
-	<meta name="msapplication-TileColor" content="#494f5c">
+	<meta name="theme-color" content="#EAEAEA">
+	<meta name="msapplication-TileColor" content="#EAEAEA">
 <meta itemprop="name" content="「Golang」 sync.Mutex源码讲解">
 <meta itemprop="description" content="非线程安全的map map是一个在开发过程中常用的内建类型，也是各位很熟悉的一个数据结构，他可以很方便的让我们做一些关于针对某些key-value结构的CRUD操作，但是在官方设计中，内建类型的map并不是一个可以在并发场景下进行并发读写的线程安全类型，此时我们就需要考虑对其进行一些线程安全的改造，首先我们要了解一下为什么```map``是一个非线程安全的类型，首先看下列代码：
 func main() { m := make(map[string]int, 2) m[&#34;dd&#34;] = 22 go func() { for { m[&#34;ff&#34;] = 1 } }() go func() { for { _ = m[&#34;dd&#34;] } }() time.Sleep(1 * time.Hour) } // out: // fatal error: concurrent map read and map write 上面的代码在运行期抛出了：fatal error: concurrent map read and map write异常，代表在读写过程中出现了同时读写的问题，那么为什么会出现这个问题呢？在map底层源代码的针对读和写的函数中有下列两段代码：

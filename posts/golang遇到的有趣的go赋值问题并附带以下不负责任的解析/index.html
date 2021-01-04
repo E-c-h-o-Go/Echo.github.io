@@ -5,8 +5,8 @@
 	<meta charset="UTF-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
 	<meta http-equiv="X-UA-Compatible" content="ie=edge">
-	<meta name="theme-color" content="#494f5c">
-	<meta name="msapplication-TileColor" content="#494f5c">
+	<meta name="theme-color" content="#EAEAEA">
+	<meta name="msapplication-TileColor" content="#EAEAEA">
 <meta itemprop="name" content="「Golang」遇到的有趣的Go赋值问题并附带以下不负责任的解析">
 <meta itemprop="description" content="今天在做一道题的时候发现了这么一个有趣的题目：
 func main() { index := 1 a := []string{&#34;f&#34;, &#34;ff&#34;, &#34;fff&#34;} index, a[index-1] = 88888, &#34;ffff&#34; fmt.Println(a) } 这个输出是什么呢？我第一眼看的时候感觉会输出panic，因为下标超界，但是运行之后发现没这么简单，运行结果如下 运行之后我惊了，不知道为什么会这样，然后我就输出了汇编看了一下（去掉了一些多余的汇编代码，我们只看赋值那行的汇编）：

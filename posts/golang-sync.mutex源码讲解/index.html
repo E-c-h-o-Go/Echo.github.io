@@ -5,8 +5,8 @@
 	<meta charset="UTF-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
 	<meta http-equiv="X-UA-Compatible" content="ie=edge">
-	<meta name="theme-color" content="#494f5c">
-	<meta name="msapplication-TileColor" content="#494f5c">
+	<meta name="theme-color" content="#EAEAEA">
+	<meta name="msapplication-TileColor" content="#EAEAEA">
 <meta itemprop="name" content="「Golang」 sync.Mutex源码讲解">
 <meta itemprop="description" content="sync.Mutex概述  后期更新：下面的代码中会多次出现 if race.Enabled { //todo } 这种代码，经过理解这种判断是进行判断当前程序是否开启了race竞态检测模式 ，即在运行go程序时是否采用 go run race xxx.go 这种进行进行竞态检测运行模式
  在进行源码解析之前，先看一下sync.Mutex是做什么的，首先看一下sync/mutex.go中的标注

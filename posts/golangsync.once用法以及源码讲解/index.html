@@ -5,8 +5,8 @@
 	<meta charset="UTF-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
 	<meta http-equiv="X-UA-Compatible" content="ie=edge">
-	<meta name="theme-color" content="#494f5c">
-	<meta name="msapplication-TileColor" content="#494f5c">
+	<meta name="theme-color" content="#EAEAEA">
+	<meta name="msapplication-TileColor" content="#EAEAEA">
 <meta itemprop="name" content="「Golang」sync.Once用法以及源码讲解">
 <meta itemprop="description" content="前言  在我们开发过程中经常会使用到单例模式这一经典的设计模式，单例模式可以帮助开发者针对某个（些）变量或者对象或者函数（方法）进行在程序运行期间只有一次的初始化或者函数调用操作，比如在开发项目中针对某一类连接池的初始化（如数据库连接池等）。针对这种情况，我们就需要使用单例模式进行操作。
  单例模式🌰 自己搞得单例模式 要实现一个单例模式，我们会很快就想到了在一个结构体中放置一个flag字段用于标记当前的函数是否被执行过，举个🌰：
