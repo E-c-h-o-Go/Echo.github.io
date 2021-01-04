@@ -74,6 +74,22 @@
 		</div>
 	</main>
 
+<div id="git-comments"></div>
+<link rel="stylesheet" href="https://imsun.github.io/gitment/style/default.css">
+<script src="https://imsun.github.io/gitment/dist/gitment.browser.js"></script>
+<script>
+	var gitment = new Gitment({
+		owner: '995328ca3d420ab499bc',
+		repo: '存储评论的 repo',
+		oauth: {
+			client_id: '你的 client ID',
+			client_secret: '你的 client secret',
+		}
+	})
+	gitment.render('git-comments')
+</script>
+
+
 	<footer id="site-footer" class="section-inner thin animated fadeIn faster">
 		<p>&copy; 2021 <a href="http://echoblog.cc/">_Echo_</a> &#183; <a href="https://creativecommons.org/licenses/by-nc/4.0/" target="_blank" rel="noopener">CC BY-NC 4.0</a></p>
 		<p>
