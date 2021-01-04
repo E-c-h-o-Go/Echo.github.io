@@ -1,11 +1,375 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<meta http-equiv="X-UA-Compatible" content="ie=edge">
+	<meta name="theme-color" content="#EAEAEA">
+	<meta name="msapplication-TileColor" content="#EAEAEA">
+<meta itemprop="name" content="「Golang」 sync.Mutex源码讲解">
+<meta itemprop="description" content="sync.Mutex概述  后期更新：下面的代码中会多次出现 if race.Enabled { //todo } 这种代码，经过理解这种判断是进行判断当前程序是否开启了race竞态检测模式 ，即在运行go程序时是否采用 go run race xxx.go 这种进行进行竞态检测运行模式
+ 在进行源码解析之前，先看一下sync.Mutex是做什么的，首先看一下sync/mutex.go中的标注
+ A Mutex is a mutual exclusion lock.The zero value for a Mutex is an unlocked mutex. A Mutex must not be copied after first use. 译注：Mutex是互斥锁，Mutex的零值是解锁的Mutex。Mutex在第一次使用后不得复制。
+ 从sync.Mutex的注释中可以看出，Mutex是一个互斥锁，根据百度百科给到的互斥锁的意义：
+ 在编程中，引入了对象互斥锁的概念，来保证共享数据操作的完整性。每个对象都对应于一个可称为&quot; 互斥锁&quot; 的标记，这个标记用来保证在任一时刻，只能有一个线程访问该对象。
+ 也就是说，当某个struct中存在一个Mutex字段时，在某些方法进行调用时，如果Mutex已经被其他go程占用，那么本次调用会进行阻塞直至该Mutex被解锁。
+sync.Mutex解析 接下来看一下sync.Mutex结构体的字段内容：
+type Mutex struct { state int32 //当前锁的状态，该int32字段通过位移操作使之可以包含不同意义 	sema uint32 //是一个信号变量用于负责go程的唤醒和阻塞休眠 } const ( mutexLocked = 1 &lt;&lt; iota // 锁是否被持有 即是否已经锁住 	mutexWoken // 是否有被唤醒的go程 	mutexStarving //是否处于饥饿状态，此标记可以确保某些go程不会长久获取不到锁 	mutexWaiterShift = iota // 目前等待锁的go程数量 	starvationThresholdNs = 1e6 //进入饥饿状态的阈值时间 1ms ) Lock() 关于饥饿状态这个问题等之后在进行讲解，首先先说一下对Mutex加锁的过程">
+<meta itemprop="datePublished" content="2021-01-04T00:00:00+00:00" />
+<meta itemprop="dateModified" content="2021-01-04T00:00:00+00:00" />
+<meta itemprop="wordCount" content="552">
 
 
 
-<style>
-	textarea{
-		color: #0a0a0a;
-	}
-</style>
+<meta itemprop="keywords" content="Golang," />
+<meta property="og:title" content="「Golang」 sync.Mutex源码讲解" />
+<meta property="og:description" content="sync.Mutex概述  后期更新：下面的代码中会多次出现 if race.Enabled { //todo } 这种代码，经过理解这种判断是进行判断当前程序是否开启了race竞态检测模式 ，即在运行go程序时是否采用 go run race xxx.go 这种进行进行竞态检测运行模式
+ 在进行源码解析之前，先看一下sync.Mutex是做什么的，首先看一下sync/mutex.go中的标注
+ A Mutex is a mutual exclusion lock.The zero value for a Mutex is an unlocked mutex. A Mutex must not be copied after first use. 译注：Mutex是互斥锁，Mutex的零值是解锁的Mutex。Mutex在第一次使用后不得复制。
+ 从sync.Mutex的注释中可以看出，Mutex是一个互斥锁，根据百度百科给到的互斥锁的意义：
+ 在编程中，引入了对象互斥锁的概念，来保证共享数据操作的完整性。每个对象都对应于一个可称为&quot; 互斥锁&quot; 的标记，这个标记用来保证在任一时刻，只能有一个线程访问该对象。
+ 也就是说，当某个struct中存在一个Mutex字段时，在某些方法进行调用时，如果Mutex已经被其他go程占用，那么本次调用会进行阻塞直至该Mutex被解锁。
+sync.Mutex解析 接下来看一下sync.Mutex结构体的字段内容：
+type Mutex struct { state int32 //当前锁的状态，该int32字段通过位移操作使之可以包含不同意义 	sema uint32 //是一个信号变量用于负责go程的唤醒和阻塞休眠 } const ( mutexLocked = 1 &lt;&lt; iota // 锁是否被持有 即是否已经锁住 	mutexWoken // 是否有被唤醒的go程 	mutexStarving //是否处于饥饿状态，此标记可以确保某些go程不会长久获取不到锁 	mutexWaiterShift = iota // 目前等待锁的go程数量 	starvationThresholdNs = 1e6 //进入饥饿状态的阈值时间 1ms ) Lock() 关于饥饿状态这个问题等之后在进行讲解，首先先说一下对Mutex加锁的过程" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="http://echoblog.cc/posts/golang-sync.mutex%E6%BA%90%E7%A0%81%E8%AE%B2%E8%A7%A3/" />
+<meta property="article:published_time" content="2021-01-04T00:00:00+00:00" />
+<meta property="article:modified_time" content="2021-01-04T00:00:00+00:00" />
+<meta name="twitter:card" content="summary"/>
+<meta name="twitter:title" content="「Golang」 sync.Mutex源码讲解"/>
+<meta name="twitter:description" content="sync.Mutex概述  后期更新：下面的代码中会多次出现 if race.Enabled { //todo } 这种代码，经过理解这种判断是进行判断当前程序是否开启了race竞态检测模式 ，即在运行go程序时是否采用 go run race xxx.go 这种进行进行竞态检测运行模式
+ 在进行源码解析之前，先看一下sync.Mutex是做什么的，首先看一下sync/mutex.go中的标注
+ A Mutex is a mutual exclusion lock.The zero value for a Mutex is an unlocked mutex. A Mutex must not be copied after first use. 译注：Mutex是互斥锁，Mutex的零值是解锁的Mutex。Mutex在第一次使用后不得复制。
+ 从sync.Mutex的注释中可以看出，Mutex是一个互斥锁，根据百度百科给到的互斥锁的意义：
+ 在编程中，引入了对象互斥锁的概念，来保证共享数据操作的完整性。每个对象都对应于一个可称为&quot; 互斥锁&quot; 的标记，这个标记用来保证在任一时刻，只能有一个线程访问该对象。
+ 也就是说，当某个struct中存在一个Mutex字段时，在某些方法进行调用时，如果Mutex已经被其他go程占用，那么本次调用会进行阻塞直至该Mutex被解锁。
+sync.Mutex解析 接下来看一下sync.Mutex结构体的字段内容：
+type Mutex struct { state int32 //当前锁的状态，该int32字段通过位移操作使之可以包含不同意义 	sema uint32 //是一个信号变量用于负责go程的唤醒和阻塞休眠 } const ( mutexLocked = 1 &lt;&lt; iota // 锁是否被持有 即是否已经锁住 	mutexWoken // 是否有被唤醒的go程 	mutexStarving //是否处于饥饿状态，此标记可以确保某些go程不会长久获取不到锁 	mutexWaiterShift = iota // 目前等待锁的go程数量 	starvationThresholdNs = 1e6 //进入饥饿状态的阈值时间 1ms ) Lock() 关于饥饿状态这个问题等之后在进行讲解，首先先说一下对Mutex加锁的过程"/>
+
+	<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+	<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+	<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+	<link rel="manifest" href="/site.webmanifest">
+	<link rel="mask-icon" href="/safari-pinned-tab.svg" color="">
+	<link rel="shortcut icon" href="/favicon.ico">
+
+	<title>「Golang」 sync.Mutex源码讲解</title>
+	<link rel="stylesheet" href="http://echoblog.cc/css/style.min.eac77496566fd7d5768fd650ddb0b2b181ca6a2d7c5fdd6fe6b8ba4bf47e566f.css" integrity="sha256-6sd0llZv19V2j9ZQ3bCysYHKai18X91v5ri6S/R+Vm8=" crossorigin="anonymous">
+	
+</head>
+
+<body id="page">
+	
+	<header id="site-header" class="animated slideInUp">
+		<div class="hdr-wrapper section-inner">
+			<div class="hdr-left">
+				<div class="site-branding">
+					<a href="http://echoblog.cc/">_Echo_</a>
+				</div>
+				<nav class="site-nav hide-in-mobile">
+					
+				<a href="http://echoblog.cc/posts/">Posts</a>
+				<a href="http://echoblog.cc/about/">About</a>
+
+				</nav>
+			</div>
+			<div class="hdr-right hdr-icons">
+				<span class="hdr-social hide-in-mobile"><a href="https://blog.csdn.net/qq_37005831?spm=1000.2115.3001.5343" target="_blank" rel="noopener me" title="Csdn"><svg xmlns="http://www.w3.org/2000/svg" class="feather feather-link" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg></a><a href="https://github.com/E-c-h-o-Go" target="_blank" rel="noopener me" title="Github"><svg xmlns="http://www.w3.org/2000/svg" class="feather" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path></svg></a></span><button id="menu-btn" class="hdr-btn" title=""><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-menu"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg></button>
+			</div>
+		</div>
+	</header>
+	<div id="mobile-menu" class="animated fast">
+		<ul>
+			<li><a href="http://echoblog.cc/posts/">Posts</a></li>
+			<li><a href="http://echoblog.cc/about/">About</a></li>
+		</ul>
+	</div>
+
+
+	<main class="site-main section-inner animated fadeIn faster">
+		<article class="thin">
+			<header class="post-header">
+				<div class="post-meta"><span>Jan 4, 2021</span></div>
+				<h1>「Golang」 sync.Mutex源码讲解</h1>
+			</header>
+			<div class="content">
+				<h2 id="syncmutex概述">sync.Mutex概述<a href="#syncmutex概述" class="anchor" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 7h3a5 5 0 0 1 5 5 5 5 0 0 1-5 5h-3m-6 0H6a5 5 0 0 1-5-5 5 5 0 0 1 5-5h3"></path><line x1="8" y1="12" x2="16" y2="12"></line></svg></a></h2>
+<blockquote>
+<p>后期更新：下面的代码中会多次出现
+<code>if race.Enabled { //todo  }</code>
+这种代码，经过理解这种判断是进行判断当前程序是否开启了race竞态检测模式 ，即在运行go程序时是否采用
+go run race xxx.go
+这种进行进行竞态检测运行模式</p>
+</blockquote>
+<p>在进行源码解析之前，先看一下sync.Mutex是做什么的，首先看一下sync/mutex.go中的标注</p>
+<blockquote>
+<p>A Mutex is a mutual exclusion lock.The zero value for a Mutex is an unlocked mutex. A Mutex must not be copied after first use.
+译注：Mutex是互斥锁，Mutex的零值是解锁的Mutex。Mutex在第一次使用后不得复制。</p>
+</blockquote>
+<p>从sync.Mutex的注释中可以看出，Mutex是一个互斥锁，根据百度百科给到的互斥锁的意义：</p>
+<blockquote>
+<p><a href="https://baike.baidu.com/item/%E4%BA%92%E6%96%A5%E9%94%81">在编程中，引入了对象互斥锁的概念，来保证共享数据操作的完整性。每个对象都对应于一个可称为&quot; 互斥锁&quot; 的标记，这个标记用来保证在任一时刻，只能有一个线程访问该对象。</a></p>
+</blockquote>
+<p>也就是说，当某个struct中存在一个Mutex字段时，在某些方法进行调用时，如果Mutex已经被其他go程占用，那么本次调用会进行阻塞直至该Mutex被解锁。</p>
+<h2 id="syncmutex解析">sync.Mutex解析<a href="#syncmutex解析" class="anchor" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 7h3a5 5 0 0 1 5 5 5 5 0 0 1-5 5h-3m-6 0H6a5 5 0 0 1-5-5 5 5 0 0 1 5-5h3"></path><line x1="8" y1="12" x2="16" y2="12"></line></svg></a></h2>
+<p>接下来看一下sync.Mutex结构体的字段内容：</p>
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go"><span class="kd">type</span> <span class="nx">Mutex</span> <span class="kd">struct</span> <span class="p">{</span>
+	<span class="nx">state</span> <span class="kt">int32</span> <span class="c1">//当前锁的状态，该int32字段通过位移操作使之可以包含不同意义
+</span><span class="c1"></span>	<span class="nx">sema</span>  <span class="kt">uint32</span> <span class="c1">//是一个信号变量用于负责go程的唤醒和阻塞休眠
+</span><span class="c1"></span><span class="p">}</span>
+
+
+<span class="kd">const</span> <span class="p">(</span>
+	<span class="nx">mutexLocked</span> <span class="p">=</span> <span class="mi">1</span> <span class="o">&lt;&lt;</span> <span class="kc">iota</span> <span class="c1">// 锁是否被持有 即是否已经锁住
+</span><span class="c1"></span>	<span class="nx">mutexWoken</span> <span class="c1">// 是否有被唤醒的go程
+</span><span class="c1"></span>	<span class="nx">mutexStarving</span> <span class="c1">//是否处于饥饿状态，此标记可以确保某些go程不会长久获取不到锁
+</span><span class="c1"></span>	<span class="nx">mutexWaiterShift</span> <span class="p">=</span> <span class="kc">iota</span> <span class="c1">// 目前等待锁的go程数量
+</span><span class="c1"></span>	
+	<span class="nx">starvationThresholdNs</span> <span class="p">=</span> <span class="mf">1e6</span> <span class="c1">//进入饥饿状态的阈值时间 1ms
+</span><span class="c1"></span><span class="p">)</span>
+
+</code></pre></div><h2 id="lock">Lock()<a href="#lock" class="anchor" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 7h3a5 5 0 0 1 5 5 5 5 0 0 1-5 5h-3m-6 0H6a5 5 0 0 1-5-5 5 5 0 0 1 5-5h3"></path><line x1="8" y1="12" x2="16" y2="12"></line></svg></a></h2>
+<p>关于饥饿状态这个问题等之后在进行讲解，首先先说一下对Mutex加锁的过程</p>
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go"><span class="kd">func</span> <span class="p">(</span><span class="nx">m</span> <span class="o">*</span><span class="nx">Mutex</span><span class="p">)</span> <span class="nf">Lock</span><span class="p">()</span> <span class="p">{</span>
+	<span class="c1">// Fast path: grab unlocked mutex.
+</span><span class="c1"></span>	<span class="k">if</span> <span class="nx">atomic</span><span class="p">.</span><span class="nf">CompareAndSwapInt32</span><span class="p">(</span><span class="o">&amp;</span><span class="nx">m</span><span class="p">.</span><span class="nx">state</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="nx">mutexLocked</span><span class="p">)</span> <span class="p">{</span>
+		<span class="k">if</span> <span class="nx">race</span><span class="p">.</span><span class="nx">Enabled</span> <span class="p">{</span>
+			<span class="nx">race</span><span class="p">.</span><span class="nf">Acquire</span><span class="p">(</span><span class="nx">unsafe</span><span class="p">.</span><span class="nf">Pointer</span><span class="p">(</span><span class="nx">m</span><span class="p">))</span>
+		<span class="p">}</span>
+		<span class="k">return</span>
+	<span class="p">}</span>
+	<span class="c1">// Slow path (outlined so that the fast path can be inlined)
+</span><span class="c1"></span>	<span class="nx">m</span><span class="p">.</span><span class="nf">lockSlow</span><span class="p">()</span>
+<span class="p">}</span>
+</code></pre></div><p>Lock方法被分成了两个情况进行加锁，首先第一种情况 即<strong>Fast Path</strong>快速加锁方式，此方式会首先进行CAS<!-- raw HTML omitted -->1<!-- raw HTML omitted --> 判断，首先进行判断当前的state字段是否为0，如果为0则代表当前互斥锁未被占用，因此可以直接对其进行加锁操作然后直接返回，所以此情况被称为<strong>Fast Path</strong>，在判断语句中的</p>
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go"><span class="k">if</span> <span class="nx">race</span><span class="p">.</span><span class="nx">Enabled</span> <span class="p">{</span>
+			<span class="nx">race</span><span class="p">.</span><span class="nf">Acquire</span><span class="p">(</span><span class="nx">unsafe</span><span class="p">.</span><span class="nf">Pointer</span><span class="p">(</span><span class="nx">m</span><span class="p">))</span>
+		<span class="p">}</span>
+</code></pre></div><p>是go提供的竟态检测器，用于检测当前是否有其他操作同时操纵此Mutex对象。</p>
+<blockquote>
+<p>注：因为race包不甚了解因此解释可能有出入，如果有更好的解释，请多指教。</p>
+</blockquote>
+<p>之后来看一下第二种情况，即<strong>Slow Path</strong>，也就是说当前锁已经被人占用，需要进行一些其他操作。因为代码较长，可能会难读一些。我会尽量在每个语句中做注释讲解。</p>
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go"><span class="kd">func</span> <span class="p">(</span><span class="nx">m</span> <span class="o">*</span><span class="nx">Mutex</span><span class="p">)</span> <span class="nf">lockSlow</span><span class="p">()</span> <span class="p">{</span>
+   <span class="c1">// 记录等待开始时间，用于与starvationThresholdNs搭配判断是否开启饥饿状态
+</span><span class="c1"></span>	<span class="kd">var</span> <span class="nx">waitStartTime</span> <span class="kt">int64</span>
+	<span class="c1">//是否是饥饿状态
+</span><span class="c1"></span>	<span class="nx">starving</span> <span class="o">:=</span> <span class="kc">false</span>
+	<span class="c1">//是否是唤醒状态
+</span><span class="c1"></span>	<span class="nx">awoke</span> <span class="o">:=</span> <span class="kc">false</span>
+	<span class="c1">//自旋次数累计
+</span><span class="c1"></span>	<span class="nx">iter</span> <span class="o">:=</span> <span class="mi">0</span>
+	<span class="c1">//下面操作的都是这个old 其为当前Mutex对象状态字段的copy
+</span><span class="c1"></span>	<span class="nx">old</span> <span class="o">:=</span> <span class="nx">m</span><span class="p">.</span><span class="nx">state</span>
+	<span class="c1">//持续循环
+</span><span class="c1"></span>	<span class="k">for</span> <span class="p">{</span>
+		<span class="c1">// 判断锁是不是非饥饿状态，并且锁还没被释放，如果是那就开始尝试自旋，多次尝试获取锁
+</span><span class="c1"></span>		<span class="c1">//不能再饥饿模式下进行自旋，因为可能会造成某些等待的很早的go程长时间获取不到锁。
+</span><span class="c1"></span>		<span class="c1">//所以当处于饥饿状态时，不能自旋，并且如果锁已经被释放了就需要竞争锁
+</span><span class="c1"></span>		<span class="k">if</span> <span class="nx">old</span><span class="o">&amp;</span><span class="p">(</span><span class="nx">mutexLocked</span><span class="p">|</span><span class="nx">mutexStarving</span><span class="p">)</span> <span class="o">==</span> <span class="nx">mutexLocked</span> <span class="o">&amp;&amp;</span> <span class="nf">runtime_canSpin</span><span class="p">(</span><span class="nx">iter</span><span class="p">)</span> <span class="p">{</span>
+		<span class="c1">//如果非唤醒状态，并且mutexWoken标记位为0并且其他go程也在等待锁的时候
+</span><span class="c1"></span>		<span class="c1">//尝试设置mutexWoken标记位，用于告知在Unlock的时候不需要去唤醒其他等待go程
+</span><span class="c1"></span>		<span class="c1">//设置唤醒标记的意义在于可以告知Unlock有go程正在自旋等待锁，让其无需唤醒其他正在等待的go程
+</span><span class="c1"></span>			<span class="k">if</span> <span class="p">!</span><span class="nx">awoke</span> <span class="o">&amp;&amp;</span> <span class="nx">old</span><span class="o">&amp;</span><span class="nx">mutexWoken</span> <span class="o">==</span> <span class="mi">0</span> <span class="o">&amp;&amp;</span> <span class="nx">old</span><span class="o">&gt;&gt;</span><span class="nx">mutexWaiterShift</span> <span class="o">!=</span> <span class="mi">0</span> <span class="o">&amp;&amp;</span>
+				<span class="nx">atomic</span><span class="p">.</span><span class="nf">CompareAndSwapInt32</span><span class="p">(</span><span class="o">&amp;</span><span class="nx">m</span><span class="p">.</span><span class="nx">state</span><span class="p">,</span> <span class="nx">old</span><span class="p">,</span> <span class="nx">old</span><span class="p">|</span><span class="nx">mutexWoken</span><span class="p">)</span> <span class="p">{</span>
+				<span class="nx">awoke</span> <span class="p">=</span> <span class="kc">true</span>
+			<span class="p">}</span>
+			<span class="c1">//开始自旋 自旋代码是runtime在编译期间动态生成
+</span><span class="c1"></span>			<span class="nf">runtime_doSpin</span><span class="p">()</span>
+			<span class="c1">//自旋次数+1
+</span><span class="c1"></span>			<span class="nx">iter</span><span class="o">++</span>
+			<span class="c1">//更新锁的状态
+</span><span class="c1"></span>			<span class="nx">old</span> <span class="p">=</span> <span class="nx">m</span><span class="p">.</span><span class="nx">state</span>
+			<span class="k">continue</span>
+		<span class="p">}</span>
+		<span class="c1">//检查的状态
+</span><span class="c1"></span>		<span class="nx">new</span> <span class="o">:=</span> <span class="nx">old</span>
+		<span class="c1">//如果不是饥饿状态，则获取锁
+</span><span class="c1"></span>		<span class="k">if</span> <span class="nx">old</span><span class="o">&amp;</span><span class="nx">mutexStarving</span> <span class="o">==</span> <span class="mi">0</span> <span class="p">{</span>
+			<span class="nx">new</span> <span class="o">|=</span> <span class="nx">mutexLocked</span>
+		<span class="p">}</span>
+		<span class="c1">//等待锁go程的数量+1
+</span><span class="c1"></span>		<span class="k">if</span> <span class="nx">old</span><span class="o">&amp;</span><span class="p">(</span><span class="nx">mutexLocked</span><span class="p">|</span><span class="nx">mutexStarving</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">0</span> <span class="p">{</span>
+			<span class="nx">new</span> <span class="o">+=</span> <span class="mi">1</span> <span class="o">&lt;&lt;</span> <span class="nx">mutexWaiterShift</span>
+		<span class="p">}</span>
+		<span class="c1">// 如果是饥饿状态 并且有人占用了锁 就切换到饥饿模式
+</span><span class="c1"></span>		<span class="k">if</span> <span class="nx">starving</span> <span class="o">&amp;&amp;</span> <span class="nx">old</span><span class="o">&amp;</span><span class="nx">mutexLocked</span> <span class="o">!=</span> <span class="mi">0</span> <span class="p">{</span>
+			<span class="nx">new</span> <span class="o">|=</span> <span class="nx">mutexStarving</span>
+		<span class="p">}</span>
+		<span class="c1">//看看当前是否是唤醒go程
+</span><span class="c1"></span>		<span class="k">if</span> <span class="nx">awoke</span> <span class="p">{</span>
+				<span class="c1">//如果不是唤醒go程 但是awoke变量被设置为true 则代表出错了，，
+</span><span class="c1"></span>				<span class="k">if</span> <span class="nx">new</span><span class="o">&amp;</span><span class="nx">mutexWoken</span> <span class="o">==</span> <span class="mi">0</span> <span class="p">{</span>
+				<span class="nf">throw</span><span class="p">(</span><span class="s">&#34;sync: inconsistent mutex state&#34;</span><span class="p">)</span>
+			<span class="p">}</span>
+			<span class="c1">//go程已从睡眠中唤醒，因此，无论哪种情况，都需要重置标志。
+</span><span class="c1"></span>			<span class="nx">new</span> <span class="o">&amp;^=</span> <span class="nx">mutexWoken</span>
+		<span class="p">}</span>
+		<span class="c1">//cas 判断当前对象旧状态和old标记的状态是否相同，相同就换成new的，不相同就用当前对象的
+</span><span class="c1"></span>		<span class="k">if</span> <span class="nx">atomic</span><span class="p">.</span><span class="nf">CompareAndSwapInt32</span><span class="p">(</span><span class="o">&amp;</span><span class="nx">m</span><span class="p">.</span><span class="nx">state</span><span class="p">,</span> <span class="nx">old</span><span class="p">,</span> <span class="nx">new</span><span class="p">)</span> <span class="p">{</span>
+		<span class="c1">//old已经被解锁并释放并且不是饥饿状态 就代表正常的获取到了锁 则返回
+</span><span class="c1"></span>			<span class="k">if</span> <span class="nx">old</span><span class="o">&amp;</span><span class="p">(</span><span class="nx">mutexLocked</span><span class="p">|</span><span class="nx">mutexStarving</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span> <span class="p">{</span>
+				<span class="k">break</span> 
+			<span class="p">}</span>
+			<span class="c1">//等待时间不等于0就代表之前就开始等待了
+</span><span class="c1"></span>			<span class="nx">queueLifo</span> <span class="o">:=</span> <span class="nx">waitStartTime</span> <span class="o">!=</span> <span class="mi">0</span>
+			<span class="k">if</span> <span class="nx">waitStartTime</span> <span class="o">==</span> <span class="mi">0</span> <span class="p">{</span>
+				<span class="nx">waitStartTime</span> <span class="p">=</span> <span class="nf">runtime_nanotime</span><span class="p">()</span>
+			<span class="p">}</span>
+			<span class="c1">//如果之前就开始等待了那就放到队列前面
+</span><span class="c1"></span>			<span class="nf">runtime_SemacquireMutex</span><span class="p">(</span><span class="o">&amp;</span><span class="nx">m</span><span class="p">.</span><span class="nx">sema</span><span class="p">,</span> <span class="nx">queueLifo</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+			<span class="c1">//如果等待时间超过1ms 即starvationThresholdNs常量中的设定值，则开启饥饿模式
+</span><span class="c1"></span>			<span class="nx">starving</span> <span class="p">=</span> <span class="nx">starving</span> <span class="o">||</span> <span class="nf">runtime_nanotime</span><span class="p">()</span><span class="o">-</span><span class="nx">waitStartTime</span> <span class="p">&gt;</span> <span class="nx">starvationThresholdNs</span>
+			<span class="nx">old</span> <span class="p">=</span> <span class="nx">m</span><span class="p">.</span><span class="nx">state</span>
+			<span class="c1">//如果当前状态非饥饿模式
+</span><span class="c1"></span>			<span class="k">if</span> <span class="nx">old</span><span class="o">&amp;</span><span class="nx">mutexStarving</span> <span class="o">!=</span> <span class="mi">0</span> <span class="p">{</span>
+				<span class="c1">//如果此goroutine被唤醒，并且互斥锁处于饥饿模式，则所有权已移交给我们，但互斥锁处于某种不一致的状态：MutexLocked未设置，我们仍被视为等待。即状态设置有误
+</span><span class="c1"></span>				<span class="k">if</span> <span class="nx">old</span><span class="o">&amp;</span><span class="p">(</span><span class="nx">mutexLocked</span><span class="p">|</span><span class="nx">mutexWoken</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">0</span> <span class="o">||</span> <span class="nx">old</span><span class="o">&gt;&gt;</span><span class="nx">mutexWaiterShift</span> <span class="o">==</span> <span class="mi">0</span> <span class="p">{</span>
+					<span class="nf">throw</span><span class="p">(</span><span class="s">&#34;sync: inconsistent mutex state&#34;</span><span class="p">)</span>
+				<span class="p">}</span>
+				<span class="c1">//减去一个等待者数量并且加锁
+</span><span class="c1"></span>				<span class="nx">delta</span> <span class="o">:=</span> <span class="nb">int32</span><span class="p">(</span><span class="nx">mutexLocked</span> <span class="o">-</span> <span class="mi">1</span><span class="o">&lt;&lt;</span><span class="nx">mutexWaiterShift</span><span class="p">)</span>
+				<span class="c1">//如果不是饥饿模式或等待数量为1的话就代表是最后一个等待者并且非饥饿状态
+</span><span class="c1"></span>				<span class="k">if</span> <span class="p">!</span><span class="nx">starving</span> <span class="o">||</span> <span class="nx">old</span><span class="o">&gt;&gt;</span><span class="nx">mutexWaiterShift</span> <span class="o">==</span> <span class="mi">1</span> <span class="p">{</span>
+					<span class="c1">//那就解除饥饿标记
+</span><span class="c1"></span>					<span class="nx">delta</span> <span class="o">-=</span> <span class="nx">mutexStarving</span>
+				<span class="p">}</span>
+				<span class="c1">//更新状态
+</span><span class="c1"></span>				<span class="nx">atomic</span><span class="p">.</span><span class="nf">AddInt32</span><span class="p">(</span><span class="o">&amp;</span><span class="nx">m</span><span class="p">.</span><span class="nx">state</span><span class="p">,</span> <span class="nx">delta</span><span class="p">)</span>
+				<span class="k">break</span>
+			<span class="p">}</span>
+			<span class="c1">//设为唤醒状态
+</span><span class="c1"></span>			<span class="nx">awoke</span> <span class="p">=</span> <span class="kc">true</span>
+			<span class="c1">//重新开始循环
+</span><span class="c1"></span>			<span class="nx">iter</span> <span class="p">=</span> <span class="mi">0</span>
+		<span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+			<span class="nx">old</span> <span class="p">=</span> <span class="nx">m</span><span class="p">.</span><span class="nx">state</span>
+		<span class="p">}</span>
+	<span class="p">}</span>
+	<span class="c1">//竟态检测
+</span><span class="c1"></span>	<span class="k">if</span> <span class="nx">race</span><span class="p">.</span><span class="nx">Enabled</span> <span class="p">{</span>
+		<span class="nx">race</span><span class="p">.</span><span class="nf">Acquire</span><span class="p">(</span><span class="nx">unsafe</span><span class="p">.</span><span class="nf">Pointer</span><span class="p">(</span><span class="nx">m</span><span class="p">))</span>
+	<span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div><p>现在进行一下Lock过程的总结：总的来说过程就是，如果当前锁没被其他go程获取，那么就直接获取锁，这也是最直接的方式，如果当前锁被其他go程占用，并且还没有进入饥饿状态时，进行自旋等待，并且通知UnLock有正在自旋go程正在等待锁，在释放锁时就不要唤醒其他go程，然后判断是否需要进入饥饿状态，进入饥饿状态的条件是，当前go程等待锁的时间已经超出starvationThresholdNs常量所设定的时间即1ms，此时进入饥饿状态，饥饿状态会把当前go程放入等待锁的队列的最前端，使得其能在UnLock后立刻获得锁，防止该go程被饿死。退出饥饿模式需要符合一下两个条件中的任意一条：</p>
+<ol>
+<li>此 go程已经是队列中的最后一个 waiter 了，没有其它的等待锁的 goroutine 了；</li>
+<li>此 go程的等待时间小于 1 毫秒。</li>
+</ol>
+<p>那么当有很多的go程都在争相获取锁的时候，会按照什么顺序获取锁呢？</p>
+<blockquote>
+<p>等待的goroutine们是以FIFO排队的
+1）当Mutex处于正常模式时，若此时没有新goroutine与队头goroutine竞争，则队头goroutine获得。若有新goroutine竞争大概率新goroutine获得。
+2）当队头goroutine竞争锁失败1ms后，它会将Mutex调整为饥饿模式。进入饥饿模式后，锁的所有权会直接从解锁goroutine移交给队头goroutine，此时新来的goroutine直接放入队尾。
+3）当一个goroutine获取锁后，如果发现自己满足下列条件中的任何一个#1它是队列中最后一个#2它等待锁的时间少于1ms，则将锁切换回正常模式</p>
+</blockquote>
+<p>那么问题来了，为什么正常模式下会让新来的go程获取到锁呢？因为新来的go程当前正在占用cpu的时间片，那么如果我们能够把锁交给正在占用 cpu 时间片的 go程 的话，那就不需要做上下文的切换，在高并发的情况下，可能会有更好的性能。所以在正常模式下会把锁交给新来的go程。</p>
+<p>至此Lock()的过程就讲完了。接下来说Unlock。</p>
+<h2 id="unlock">Unlock()<a href="#unlock" class="anchor" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 7h3a5 5 0 0 1 5 5 5 5 0 0 1-5 5h-3m-6 0H6a5 5 0 0 1-5-5 5 5 0 0 1 5-5h3"></path><line x1="8" y1="12" x2="16" y2="12"></line></svg></a></h2>
+<p>首先看Unlock的代码</p>
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go"><span class="kd">func</span> <span class="p">(</span><span class="nx">m</span> <span class="o">*</span><span class="nx">Mutex</span><span class="p">)</span> <span class="nf">Unlock</span><span class="p">()</span> <span class="p">{</span>
+	<span class="k">if</span> <span class="nx">race</span><span class="p">.</span><span class="nx">Enabled</span> <span class="p">{</span>
+		<span class="nx">_</span> <span class="p">=</span> <span class="nx">m</span><span class="p">.</span><span class="nx">state</span>
+		<span class="nx">race</span><span class="p">.</span><span class="nf">Release</span><span class="p">(</span><span class="nx">unsafe</span><span class="p">.</span><span class="nf">Pointer</span><span class="p">(</span><span class="nx">m</span><span class="p">))</span>
+	<span class="p">}</span>
+
+	<span class="c1">// Fast path: drop lock bit.
+</span><span class="c1"></span>	<span class="nx">new</span> <span class="o">:=</span> <span class="nx">atomic</span><span class="p">.</span><span class="nf">AddInt32</span><span class="p">(</span><span class="o">&amp;</span><span class="nx">m</span><span class="p">.</span><span class="nx">state</span><span class="p">,</span> <span class="o">-</span><span class="nx">mutexLocked</span><span class="p">)</span>
+	<span class="k">if</span> <span class="nx">new</span> <span class="o">!=</span> <span class="mi">0</span> <span class="p">{</span>
+		<span class="c1">// Outlined slow path to allow inlining the fast path.
+</span><span class="c1"></span>		<span class="c1">// To hide unlockSlow during tracing we skip one extra frame when tracing GoUnblock.
+</span><span class="c1"></span>		<span class="nx">m</span><span class="p">.</span><span class="nf">unlockSlow</span><span class="p">(</span><span class="nx">new</span><span class="p">)</span>
+	<span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div><p>Unlock与Lock一样分为两个情况，<strong>Fast Path</strong>直接将state标记位-1进行解锁，如果返回值不为0那么就代表还有等待锁的go程这样就需要对其进行一些处理，就进入了<strong>Slow Path</strong>情况：</p>
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go"><span class="kd">func</span> <span class="p">(</span><span class="nx">m</span> <span class="o">*</span><span class="nx">Mutex</span><span class="p">)</span> <span class="nf">unlockSlow</span><span class="p">(</span><span class="nx">new</span> <span class="kt">int32</span><span class="p">)</span> <span class="p">{</span>
+	<span class="c1">//首选判断是不是被解锁过了，因为不可二次解锁
+</span><span class="c1"></span>	<span class="k">if</span> <span class="p">(</span><span class="nx">new</span><span class="o">+</span><span class="nx">mutexLocked</span><span class="p">)</span><span class="o">&amp;</span><span class="nx">mutexLocked</span> <span class="o">==</span> <span class="mi">0</span> <span class="p">{</span>
+		<span class="nf">throw</span><span class="p">(</span><span class="s">&#34;sync: unlock of unlocked mutex&#34;</span><span class="p">)</span>
+	<span class="p">}</span>
+	<span class="c1">//如果不是饥饿状态则做处理 否则就唤醒处于等待队列第一个的go程
+</span><span class="c1"></span>	<span class="k">if</span> <span class="nx">new</span><span class="o">&amp;</span><span class="nx">mutexStarving</span> <span class="o">==</span> <span class="mi">0</span> <span class="p">{</span>
+		<span class="nx">old</span> <span class="o">:=</span> <span class="nx">new</span>
+		<span class="k">for</span> <span class="p">{</span>
+		<span class="c1">//判断是否是最后一个go程或者唤醒标记处于已标记状态则不唤醒任何等待go程
+</span><span class="c1"></span>			<span class="k">if</span> <span class="nx">old</span><span class="o">&gt;&gt;</span><span class="nx">mutexWaiterShift</span> <span class="o">==</span> <span class="mi">0</span> <span class="o">||</span> <span class="nx">old</span><span class="o">&amp;</span><span class="p">(</span><span class="nx">mutexLocked</span><span class="p">|</span><span class="nx">mutexWoken</span><span class="p">|</span><span class="nx">mutexStarving</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">0</span> <span class="p">{</span>
+				<span class="k">return</span>
+			<span class="p">}</span>
+			<span class="c1">//否则就等待队列-1 并且设置唤醒标记
+</span><span class="c1"></span>			<span class="nx">new</span> <span class="p">=</span> <span class="p">(</span><span class="nx">old</span> <span class="o">-</span> <span class="mi">1</span><span class="o">&lt;&lt;</span><span class="nx">mutexWaiterShift</span><span class="p">)</span> <span class="p">|</span> <span class="nx">mutexWoken</span>
+			<span class="c1">//然后进行CAS处理
+</span><span class="c1"></span>			<span class="k">if</span> <span class="nx">atomic</span><span class="p">.</span><span class="nf">CompareAndSwapInt32</span><span class="p">(</span><span class="o">&amp;</span><span class="nx">m</span><span class="p">.</span><span class="nx">state</span><span class="p">,</span> <span class="nx">old</span><span class="p">,</span> <span class="nx">new</span><span class="p">)</span> <span class="p">{</span>
+				<span class="nf">runtime_Semrelease</span><span class="p">(</span><span class="o">&amp;</span><span class="nx">m</span><span class="p">.</span><span class="nx">sema</span><span class="p">,</span> <span class="kc">false</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+				<span class="k">return</span>
+			<span class="p">}</span>
+			<span class="nx">old</span> <span class="p">=</span> <span class="nx">m</span><span class="p">.</span><span class="nx">state</span>
+		<span class="p">}</span>
+	<span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+			<span class="nf">runtime_Semrelease</span><span class="p">(</span><span class="o">&amp;</span><span class="nx">m</span><span class="p">.</span><span class="nx">sema</span><span class="p">,</span> <span class="kc">true</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+	<span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div><p>Unlock的代码要比Lock少很多，也好理解的多，总的来说就是首选判断是否是重复解锁，如果是就报错，否则判断是否是饥饿状态如果是就直接唤醒当前等待锁队列的第一个go程，否则就判断是否是还有没有等待的go程或者是否已经被Lock标记不需要唤醒其他go程，如果是的话就直接返回，否则就将等待数量-1并且设置唤醒标记然后唤醒一个等待锁队列中的go程，让其得到锁。</p>
+<h2 id="总结">总结<a href="#总结" class="anchor" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 7h3a5 5 0 0 1 5 5 5 5 0 0 1-5 5h-3m-6 0H6a5 5 0 0 1-5-5 5 5 0 0 1 5-5h3"></path><line x1="8" y1="12" x2="16" y2="12"></line></svg></a></h2>
+<p>至此sync.Mutex的源码解析就解析完了，可能有些地方有些理解上的错误，请各位谅解并且帮忙指出修改意见，如果这篇文章能帮到你，这是我的荣幸。</p>
+<h2 id="参考链接">参考链接：<a href="#参考链接" class="anchor" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 7h3a5 5 0 0 1 5 5 5 5 0 0 1-5 5h-3m-6 0H6a5 5 0 0 1-5-5 5 5 0 0 1 5-5h3"></path><line x1="8" y1="12" x2="16" y2="12"></line></svg></a></h2>
+<p>[^1]	CAS比较与交换:<a href="https://baike.baidu.com/item/CAS/1329876#viewPageContent">https://baike.baidu.com/item/CAS/1329876#viewPageContent</a></p>
+
+			</div>
+			<hr class="post-end">
+			<footer class="post-info">
+				<p>
+					<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-tag meta-icon"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path><line x1="7" y1="7" x2="7" y2="7"></line></svg><span class="tag"><a href="http://echoblog.cc/tags/golang">Golang</a></span>
+				</p>
+				<p><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-file-text"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg></p>
+				<p><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-calendar"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>2021-01-04 08:00 &#43;0800</p>
+			</footer>
+		</article>
+		<div class="post-nav thin">
+			<a class="prev-post" href="http://echoblog.cc/posts/golang%E5%B9%B6%E5%8F%91%E5%9C%BA%E6%99%AF%E4%B8%8B%E7%9A%84map%E4%BD%BF%E7%94%A8%E6%96%B9%E5%BC%8F%E5%8F%8A%E9%81%BF%E5%9D%91%E6%8C%87%E5%8D%97/">
+				<span class="post-nav-label">&nbsp;<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-right"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg></span><br><span>「Golang」 sync.Mutex源码讲解</span>
+			</a>
+		</div>
+		<div id="comments" class="thin" >
+			<style>
+				textarea{
+					color: #0a0a0a;
+				}
+			</style>
+<link rel="stylesheet" href="https://unpkg.com/gitalk/dist/gitalk.css">
+			<script src="https://unpkg.com/gitalk/dist/gitalk.min.js"></script>
+			<div id="gitalk-container"></div>
+			<script src="https://cdn.bootcss.com/js-sha1/0.6.0/sha1.js"></script>
+			<script>
+				const gitalk = new Gitalk({
+					clientID: '995328ca3d420ab499bc',
+					clientSecret: '7efc85b29c231f5ec361d9f5b44c3802cc17cb58',
+					repo: 'Echo.github.io',
+					owner: 'E-c-h-o-Go',
+					admin: ['E-c-h-o-Go'],
+					id: sha1(location.pathname),      
+					distractionFreeMode: false  
+				})
+
+				gitalk.render('gitalk-container')
+
+			</script>
+		</div>
+	</main>
+
+
+	<footer id="site-footer" class="section-inner thin animated fadeIn faster">
+		<p>&copy; 2021 <a href="http://echoblog.cc/">_Echo_</a> &#183; <a href="https://creativecommons.org/licenses/by-nc/4.0/" target="_blank" rel="noopener">CC BY-NC 4.0</a></p>
+		<p>
+			Made with <a href="https://gohugo.io/" target="_blank" rel="noopener">Hugo</a> &#183; Theme <a href="https://github.com/Track3/hermit" target="_blank" rel="noopener">Hermit</a> &#183; <a href="http://echoblog.cc/posts/index.xml" target="_blank" title="rss"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-rss"><path d="M4 11a9 9 0 0 1 9 9"></path><path d="M4 4a16 16 0 0 1 16 16"></path><circle cx="5" cy="19" r="1"></circle></svg></a>
+		</p>
+	</footer>
 
 
 
+	<script src="http://echoblog.cc/js/bundle.min.4a9a0ac3d2217822c7865b4161e6c2a71de1d70492264337755427898dd718f6.js" integrity="sha256-SpoKw9IheCLHhltBYebCpx3h1wSSJkM3dVQniY3XGPY=" crossorigin="anonymous"></script>
+	
+
+</body>
+
+</html>

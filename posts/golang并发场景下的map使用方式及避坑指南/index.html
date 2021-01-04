@@ -1,11 +1,589 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<meta http-equiv="X-UA-Compatible" content="ie=edge">
+	<meta name="theme-color" content="#EAEAEA">
+	<meta name="msapplication-TileColor" content="#EAEAEA">
+<meta itemprop="name" content="「Golang」 sync.Mutex源码讲解">
+<meta itemprop="description" content="非线程安全的map map是一个在开发过程中常用的内建类型，也是各位很熟悉的一个数据结构，他可以很方便的让我们做一些关于针对某些key-value结构的CRUD操作，但是在官方设计中，内建类型的map并不是一个可以在并发场景下进行并发读写的线程安全类型，此时我们就需要考虑对其进行一些线程安全的改造，首先我们要了解一下为什么```map``是一个非线程安全的类型，首先看下列代码：
+func main() { m := make(map[string]int, 2) m[&#34;dd&#34;] = 22 go func() { for { m[&#34;ff&#34;] = 1 } }() go func() { for { _ = m[&#34;dd&#34;] } }() time.Sleep(1 * time.Hour) } // out: // fatal error: concurrent map read and map write 上面的代码在运行期抛出了：fatal error: concurrent map read and map write异常，代表在读写过程中出现了同时读写的问题，那么为什么会出现这个问题呢？在map底层源代码的针对读和写的函数中有下列两段代码：
+// runtime.mapassign 即在map进行写入操作时调用的函数 func mapassign(t *maptype, h *hmap, key unsafe.Pointer) unsafe.Pointer { // ..............  // 在写入时会对h.">
+<meta itemprop="datePublished" content="2021-01-04T00:00:00+00:00" />
+<meta itemprop="dateModified" content="2021-01-04T00:00:00+00:00" />
+<meta itemprop="wordCount" content="1150">
 
 
 
-<style>
-	textarea{
-		color: #0a0a0a;
-	}
-</style>
+<meta itemprop="keywords" content="Golang," />
+<meta property="og:title" content="「Golang」 sync.Mutex源码讲解" />
+<meta property="og:description" content="非线程安全的map map是一个在开发过程中常用的内建类型，也是各位很熟悉的一个数据结构，他可以很方便的让我们做一些关于针对某些key-value结构的CRUD操作，但是在官方设计中，内建类型的map并不是一个可以在并发场景下进行并发读写的线程安全类型，此时我们就需要考虑对其进行一些线程安全的改造，首先我们要了解一下为什么```map``是一个非线程安全的类型，首先看下列代码：
+func main() { m := make(map[string]int, 2) m[&#34;dd&#34;] = 22 go func() { for { m[&#34;ff&#34;] = 1 } }() go func() { for { _ = m[&#34;dd&#34;] } }() time.Sleep(1 * time.Hour) } // out: // fatal error: concurrent map read and map write 上面的代码在运行期抛出了：fatal error: concurrent map read and map write异常，代表在读写过程中出现了同时读写的问题，那么为什么会出现这个问题呢？在map底层源代码的针对读和写的函数中有下列两段代码：
+// runtime.mapassign 即在map进行写入操作时调用的函数 func mapassign(t *maptype, h *hmap, key unsafe.Pointer) unsafe.Pointer { // ..............  // 在写入时会对h." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="http://echoblog.cc/posts/golang%E5%B9%B6%E5%8F%91%E5%9C%BA%E6%99%AF%E4%B8%8B%E7%9A%84map%E4%BD%BF%E7%94%A8%E6%96%B9%E5%BC%8F%E5%8F%8A%E9%81%BF%E5%9D%91%E6%8C%87%E5%8D%97/" />
+<meta property="article:published_time" content="2021-01-04T00:00:00+00:00" />
+<meta property="article:modified_time" content="2021-01-04T00:00:00+00:00" />
+<meta name="twitter:card" content="summary"/>
+<meta name="twitter:title" content="「Golang」 sync.Mutex源码讲解"/>
+<meta name="twitter:description" content="非线程安全的map map是一个在开发过程中常用的内建类型，也是各位很熟悉的一个数据结构，他可以很方便的让我们做一些关于针对某些key-value结构的CRUD操作，但是在官方设计中，内建类型的map并不是一个可以在并发场景下进行并发读写的线程安全类型，此时我们就需要考虑对其进行一些线程安全的改造，首先我们要了解一下为什么```map``是一个非线程安全的类型，首先看下列代码：
+func main() { m := make(map[string]int, 2) m[&#34;dd&#34;] = 22 go func() { for { m[&#34;ff&#34;] = 1 } }() go func() { for { _ = m[&#34;dd&#34;] } }() time.Sleep(1 * time.Hour) } // out: // fatal error: concurrent map read and map write 上面的代码在运行期抛出了：fatal error: concurrent map read and map write异常，代表在读写过程中出现了同时读写的问题，那么为什么会出现这个问题呢？在map底层源代码的针对读和写的函数中有下列两段代码：
+// runtime.mapassign 即在map进行写入操作时调用的函数 func mapassign(t *maptype, h *hmap, key unsafe.Pointer) unsafe.Pointer { // ..............  // 在写入时会对h."/>
+
+	<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+	<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+	<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+	<link rel="manifest" href="/site.webmanifest">
+	<link rel="mask-icon" href="/safari-pinned-tab.svg" color="">
+	<link rel="shortcut icon" href="/favicon.ico">
+
+	<title>「Golang」 sync.Mutex源码讲解</title>
+	<link rel="stylesheet" href="http://echoblog.cc/css/style.min.eac77496566fd7d5768fd650ddb0b2b181ca6a2d7c5fdd6fe6b8ba4bf47e566f.css" integrity="sha256-6sd0llZv19V2j9ZQ3bCysYHKai18X91v5ri6S/R+Vm8=" crossorigin="anonymous">
+	
+</head>
+
+<body id="page">
+	
+	<header id="site-header" class="animated slideInUp">
+		<div class="hdr-wrapper section-inner">
+			<div class="hdr-left">
+				<div class="site-branding">
+					<a href="http://echoblog.cc/">_Echo_</a>
+				</div>
+				<nav class="site-nav hide-in-mobile">
+					
+				<a href="http://echoblog.cc/posts/">Posts</a>
+				<a href="http://echoblog.cc/about/">About</a>
+
+				</nav>
+			</div>
+			<div class="hdr-right hdr-icons">
+				<span class="hdr-social hide-in-mobile"><a href="https://blog.csdn.net/qq_37005831?spm=1000.2115.3001.5343" target="_blank" rel="noopener me" title="Csdn"><svg xmlns="http://www.w3.org/2000/svg" class="feather feather-link" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg></a><a href="https://github.com/E-c-h-o-Go" target="_blank" rel="noopener me" title="Github"><svg xmlns="http://www.w3.org/2000/svg" class="feather" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path></svg></a></span><button id="menu-btn" class="hdr-btn" title=""><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-menu"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg></button>
+			</div>
+		</div>
+	</header>
+	<div id="mobile-menu" class="animated fast">
+		<ul>
+			<li><a href="http://echoblog.cc/posts/">Posts</a></li>
+			<li><a href="http://echoblog.cc/about/">About</a></li>
+		</ul>
+	</div>
+
+
+	<main class="site-main section-inner animated fadeIn faster">
+		<article class="thin">
+			<header class="post-header">
+				<div class="post-meta"><span>Jan 4, 2021</span></div>
+				<h1>「Golang」 sync.Mutex源码讲解</h1>
+			</header>
+			<div class="content">
+				<h2 id="非线程安全的map">非线程安全的<code>map</code><a href="#非线程安全的map" class="anchor" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 7h3a5 5 0 0 1 5 5 5 5 0 0 1-5 5h-3m-6 0H6a5 5 0 0 1-5-5 5 5 0 0 1 5-5h3"></path><line x1="8" y1="12" x2="16" y2="12"></line></svg></a></h2>
+<p><code>map</code>是一个在开发过程中常用的内建类型，也是各位很熟悉的一个数据结构，他可以很方便的让我们做一些关于针对某些key-value结构的CRUD操作，但是在官方设计中，内建类型的map并不是一个可以在并发场景下进行并发读写的线程安全类型，此时我们就需要考虑对其进行一些线程安全的改造，首先我们要了解一下为什么```map``是一个非线程安全的类型，首先看下列代码：</p>
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go"><span class="kd">func</span> <span class="nf">main</span><span class="p">()</span> <span class="p">{</span>
+	<span class="nx">m</span> <span class="o">:=</span> <span class="nb">make</span><span class="p">(</span><span class="kd">map</span><span class="p">[</span><span class="kt">string</span><span class="p">]</span><span class="kt">int</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+	<span class="nx">m</span><span class="p">[</span><span class="s">&#34;dd&#34;</span><span class="p">]</span> <span class="p">=</span> <span class="mi">22</span>
+	<span class="k">go</span> <span class="kd">func</span><span class="p">()</span> <span class="p">{</span>
+		<span class="k">for</span> <span class="p">{</span>
+			<span class="nx">m</span><span class="p">[</span><span class="s">&#34;ff&#34;</span><span class="p">]</span> <span class="p">=</span> <span class="mi">1</span>
+		<span class="p">}</span>
+	<span class="p">}()</span>
+	<span class="k">go</span> <span class="kd">func</span><span class="p">()</span> <span class="p">{</span>
+		<span class="k">for</span> <span class="p">{</span>
+			<span class="nx">_</span> <span class="p">=</span> <span class="nx">m</span><span class="p">[</span><span class="s">&#34;dd&#34;</span><span class="p">]</span>
+		<span class="p">}</span>
+	<span class="p">}()</span>
+	<span class="nx">time</span><span class="p">.</span><span class="nf">Sleep</span><span class="p">(</span><span class="mi">1</span> <span class="o">*</span> <span class="nx">time</span><span class="p">.</span><span class="nx">Hour</span><span class="p">)</span>
+<span class="p">}</span>
+
+<span class="c1">// out:
+</span><span class="c1">// fatal error: concurrent map read and map write
+</span></code></pre></div><p>上面的代码在运行期抛出了：<code>fatal error: concurrent map read and map write</code>异常，代表在读写过程中出现了同时读写的问题，那么为什么会出现这个问题呢？在<code>map</code>底层源代码的针对读和写的函数中有下列两段代码：</p>
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go">
+<span class="c1">// runtime.mapassign 即在map进行写入操作时调用的函数
+</span><span class="c1"></span><span class="kd">func</span> <span class="nf">mapassign</span><span class="p">(</span><span class="nx">t</span> <span class="o">*</span><span class="nx">maptype</span><span class="p">,</span> <span class="nx">h</span> <span class="o">*</span><span class="nx">hmap</span><span class="p">,</span> <span class="nx">key</span> <span class="nx">unsafe</span><span class="p">.</span><span class="nx">Pointer</span><span class="p">)</span> <span class="nx">unsafe</span><span class="p">.</span><span class="nx">Pointer</span> <span class="p">{</span>
+	<span class="c1">// ..............
+</span><span class="c1"></span>
+	<span class="c1">// 在写入时会对h.flags字段进行正在写入标记以防止并发读写
+</span><span class="c1"></span>	<span class="nx">h</span><span class="p">.</span><span class="nx">flags</span> <span class="p">^=</span> <span class="nx">hashWriting</span>
+	<span class="c1">// ..........
+</span><span class="c1"></span>	
+	<span class="c1">// 检查是否有并发写的问题
+</span><span class="c1"></span>	<span class="k">if</span> <span class="nx">h</span><span class="p">.</span><span class="nx">flags</span><span class="o">&amp;</span><span class="nx">hashWriting</span> <span class="o">==</span> <span class="mi">0</span> <span class="p">{</span>
+		<span class="nf">throw</span><span class="p">(</span><span class="s">&#34;concurrent map writes&#34;</span><span class="p">)</span>
+	<span class="p">}</span>
+	<span class="c1">// 写入完毕回复标记字段
+</span><span class="c1"></span>	<span class="nx">h</span><span class="p">.</span><span class="nx">flags</span> <span class="o">&amp;^=</span> <span class="nx">hashWriting</span>
+	<span class="c1">//.........
+</span><span class="c1"></span><span class="p">}</span>
+<span class="c1">// runtime.mapaccess1 在 value:=m[key]时调用的函数
+</span><span class="c1"></span><span class="kd">func</span> <span class="nf">mapaccess1</span><span class="p">(</span><span class="nx">t</span> <span class="o">*</span><span class="nx">maptype</span><span class="p">,</span> <span class="nx">h</span> <span class="o">*</span><span class="nx">hmap</span><span class="p">,</span> <span class="nx">key</span> <span class="nx">unsafe</span><span class="p">.</span><span class="nx">Pointer</span><span class="p">)</span> <span class="nx">unsafe</span><span class="p">.</span><span class="nx">Pointer</span> <span class="p">{</span>
+	<span class="c1">// .............
+</span><span class="c1"></span>	<span class="c1">// 检测标记字段 是否不等于0 如果不等于0则代表发生并发读写
+</span><span class="c1"></span>	<span class="k">if</span> <span class="nx">h</span><span class="p">.</span><span class="nx">flags</span><span class="o">&amp;</span><span class="nx">hashWriting</span> <span class="o">!=</span> <span class="mi">0</span> <span class="p">{</span>
+		<span class="nf">throw</span><span class="p">(</span><span class="s">&#34;concurrent map read and map write&#34;</span><span class="p">)</span>
+	<span class="p">}</span>
+	<span class="c1">// .............
+</span><span class="c1"></span><span class="p">}</span>
+<span class="c1">// runtime.mapaccess2 在 value,ok:=m[key]时调用的函数
+</span><span class="c1"></span><span class="kd">func</span> <span class="nf">mapaccess2</span><span class="p">(</span><span class="nx">t</span> <span class="o">*</span><span class="nx">maptype</span><span class="p">,</span> <span class="nx">h</span> <span class="o">*</span><span class="nx">hmap</span><span class="p">,</span> <span class="nx">key</span> <span class="nx">unsafe</span><span class="p">.</span><span class="nx">Pointer</span><span class="p">)</span> <span class="p">(</span><span class="nx">unsafe</span><span class="p">.</span><span class="nx">Pointer</span><span class="p">,</span> <span class="kt">bool</span><span class="p">)</span> <span class="p">{</span>
+	<span class="c1">// .............
+</span><span class="c1"></span>	<span class="c1">// 检测标记字段 是否不等于0 如果不等于0则代表发生并发读写
+</span><span class="c1"></span>	<span class="k">if</span> <span class="nx">h</span><span class="p">.</span><span class="nx">flags</span><span class="o">&amp;</span><span class="nx">hashWriting</span> <span class="o">!=</span> <span class="mi">0</span> <span class="p">{</span>
+		<span class="nf">throw</span><span class="p">(</span><span class="s">&#34;concurrent map read and map write&#34;</span><span class="p">)</span>
+	<span class="p">}</span>
+	<span class="c1">// .............
+</span><span class="c1"></span><span class="p">}</span>	
+</code></pre></div><p>上述源代码做了很大一部分的省略，仅留下了针对并发读写标记的设置、取消、以及检查的语句，在此能看出<code>map</code>的底层根据并发场景做了非线程安全的处理。</p>
+<h2 id="如何使得map变成线程安全">如何使得<code>map</code>变成线程安全<a href="#如何使得map变成线程安全" class="anchor" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 7h3a5 5 0 0 1 5 5 5 5 0 0 1-5 5h-3m-6 0H6a5 5 0 0 1-5-5 5 5 0 0 1 5-5h3"></path><line x1="8" y1="12" x2="16" y2="12"></line></svg></a></h2>
+<h3 id="mutexmap的实现"><code>MutexMap</code>的实现<a href="#mutexmap的实现" class="anchor" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 7h3a5 5 0 0 1 5 5 5 5 0 0 1-5 5h-3m-6 0H6a5 5 0 0 1-5-5 5 5 0 0 1 5-5h3"></path><line x1="8" y1="12" x2="16" y2="12"></line></svg></a></h3>
+<p>上面讲了<code>map</code>在并发环境下非线程安全的例子以及原因，那么目前我们如何解决这个问题呢？从之前作者的文章：<a href="https://blog.csdn.net/qq_37005831/article/details/110311956">「Golang」 sync.Mutex源码讲解</a> 中可以看到使用互斥锁可以使得在并发环境下某些对象只能在某些事件内只有一个goroutine持有对其进行CRUD操作，那么我们可以使用互斥锁对<code>map</code>对其进行封装，例子代码如下：</p>
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go"><span class="kd">type</span> <span class="nx">MutexMap</span> <span class="kd">struct</span> <span class="p">{</span>
+	<span class="nx">lock</span> <span class="nx">sync</span><span class="p">.</span><span class="nx">Mutex</span>
+	<span class="nx">m</span>    <span class="kd">map</span><span class="p">[</span><span class="kt">string</span><span class="p">]</span><span class="kt">int</span>
+<span class="p">}</span>
+
+<span class="kd">func</span> <span class="p">(</span><span class="nx">receiver</span> <span class="o">*</span><span class="nx">MutexMap</span><span class="p">)</span> <span class="nf">Get</span><span class="p">(</span><span class="nx">key</span> <span class="kt">string</span><span class="p">)</span> <span class="p">(</span><span class="kt">int</span><span class="p">,</span> <span class="kt">bool</span><span class="p">)</span> <span class="p">{</span>
+	<span class="nx">receiver</span><span class="p">.</span><span class="nx">lock</span><span class="p">.</span><span class="nf">Lock</span><span class="p">()</span>
+	<span class="nx">value</span><span class="p">,</span> <span class="nx">ok</span> <span class="o">:=</span> <span class="nx">receiver</span><span class="p">.</span><span class="nx">m</span><span class="p">[</span><span class="nx">key</span><span class="p">]</span>
+	<span class="nx">receiver</span><span class="p">.</span><span class="nx">lock</span><span class="p">.</span><span class="nf">Unlock</span><span class="p">()</span>
+	<span class="k">return</span> <span class="nx">value</span><span class="p">,</span> <span class="nx">ok</span>
+<span class="p">}</span>
+
+<span class="kd">func</span> <span class="p">(</span><span class="nx">receiver</span> <span class="o">*</span><span class="nx">MutexMap</span><span class="p">)</span> <span class="nf">Set</span><span class="p">(</span><span class="nx">key</span> <span class="kt">string</span><span class="p">,</span> <span class="nx">value</span> <span class="kt">int</span><span class="p">)</span> <span class="p">{</span>
+	<span class="nx">receiver</span><span class="p">.</span><span class="nx">lock</span><span class="p">.</span><span class="nf">Lock</span><span class="p">()</span>
+	<span class="nx">receiver</span><span class="p">.</span><span class="nx">m</span><span class="p">[</span><span class="nx">key</span><span class="p">]</span> <span class="p">=</span> <span class="nx">value</span>
+	<span class="nx">receiver</span><span class="p">.</span><span class="nx">lock</span><span class="p">.</span><span class="nf">Unlock</span><span class="p">()</span>
+<span class="p">}</span>
+<span class="kd">func</span> <span class="p">(</span><span class="nx">receiver</span> <span class="o">*</span><span class="nx">MutexMap</span><span class="p">)</span> <span class="nf">Del</span><span class="p">(</span><span class="nx">key</span> <span class="kt">string</span><span class="p">)</span> <span class="p">{</span>
+	<span class="nx">receiver</span><span class="p">.</span><span class="nx">lock</span><span class="p">.</span><span class="nf">Lock</span><span class="p">()</span>
+	<span class="nb">delete</span><span class="p">(</span><span class="nx">receiver</span><span class="p">.</span><span class="nx">m</span><span class="p">,</span> <span class="nx">key</span><span class="p">)</span>
+	<span class="nx">receiver</span><span class="p">.</span><span class="nx">lock</span><span class="p">.</span><span class="nf">Unlock</span><span class="p">()</span>
+<span class="p">}</span>
+</code></pre></div><p>上述代码中作者使用了一个结构体对<code>sync.Mutex</code>和<code>map</code>进行了封装，并且对外提供了一系列的方法以供使用，从上述方法中可以看到，在<code>Get(),Set(),Del()</code>方法中进行<code>map</code>操作前均对其进行了互斥锁加锁操作，这样使得该结构体对象可以在并发环境下保证只有一个goroutine持有对其<code>map</code>进行CRUD操作，这样也就消除了并发读写问题的影响。</p>
+<h3 id="mutexmap的优化rwmutexmap的诞生"><code>MutexMap</code>的优化，<code>RWMutexMap</code>的诞生<a href="#mutexmap的优化rwmutexmap的诞生" class="anchor" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 7h3a5 5 0 0 1 5 5 5 5 0 0 1-5 5h-3m-6 0H6a5 5 0 0 1-5-5 5 5 0 0 1 5-5h3"></path><line x1="8" y1="12" x2="16" y2="12"></line></svg></a></h3>
+<p>在上一节中，我们进行了<code>MutexMap</code>的实现，但是有一个问题也就产生了，由于互斥锁的特性，虽然可以提供线程安全的 <code>map</code>，但是在大量并发读写的情况下，锁的竞争会非常激烈。尤其在读的并发非常大的时候，互斥锁会严重影响读取的性能，因为在通过<code>map</code>底层源码发现，并发的读并不会产生<code>panic</code>只有并发读写时，才会发生，因此，互斥锁会导致整体读的效率下降很多，此时我们就应该使用读写锁来进行优化，读写锁相关解析请阅读: <a href="https://blog.csdn.net/qq_37005831/article/details/110739530">「Golang」sync.RWMutex源码讲解</a>，该文章中指出：</p>
+<blockquote>
+<p>读写锁就是一个可以并发读但是不可以并发写的锁，由于互斥锁的特性，会导致将所有goroutine（下称协程）串行化，从而影响整体程序运行的性能，如果写的数量大于读的数量时，性能损耗暂且可以忽略不计（建议不要忽略），但是当读的数量大于写的数量时，互斥锁对性能的影响是很大的，所以此刻我们需要采用读写锁来进行读操作和写操作的分开。</p>
+</blockquote>
+<p>现在我们就对<code>MutexMap</code>进行读写锁的优化，优化后的代码如下：</p>
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go"><span class="kd">type</span> <span class="nx">RWMutexMap</span> <span class="kd">struct</span> <span class="p">{</span>
+	<span class="nx">lock</span> <span class="nx">sync</span><span class="p">.</span><span class="nx">RWMutex</span>
+	<span class="nx">m</span>    <span class="kd">map</span><span class="p">[</span><span class="kt">string</span><span class="p">]</span><span class="kt">int</span>
+<span class="p">}</span>
+
+<span class="kd">func</span> <span class="p">(</span><span class="nx">receiver</span> <span class="o">*</span><span class="nx">RWMutexMap</span><span class="p">)</span> <span class="nf">Get</span><span class="p">(</span><span class="nx">key</span> <span class="kt">string</span><span class="p">)</span> <span class="p">(</span><span class="kt">int</span><span class="p">,</span> <span class="kt">bool</span><span class="p">)</span> <span class="p">{</span>
+	<span class="nx">receiver</span><span class="p">.</span><span class="nx">lock</span><span class="p">.</span><span class="nf">RLock</span><span class="p">()</span>
+	<span class="nx">value</span><span class="p">,</span> <span class="nx">ok</span> <span class="o">:=</span> <span class="nx">receiver</span><span class="p">.</span><span class="nx">m</span><span class="p">[</span><span class="nx">key</span><span class="p">]</span>
+	<span class="nx">receiver</span><span class="p">.</span><span class="nx">lock</span><span class="p">.</span><span class="nf">RUnlock</span><span class="p">()</span>
+	<span class="k">return</span> <span class="nx">value</span><span class="p">,</span> <span class="nx">ok</span>
+<span class="p">}</span>
+
+<span class="kd">func</span> <span class="p">(</span><span class="nx">receiver</span> <span class="o">*</span><span class="nx">RWMutexMap</span><span class="p">)</span> <span class="nf">Set</span><span class="p">(</span><span class="nx">key</span> <span class="kt">string</span><span class="p">,</span> <span class="nx">value</span> <span class="kt">int</span><span class="p">)</span> <span class="p">{</span>
+	<span class="nx">receiver</span><span class="p">.</span><span class="nx">lock</span><span class="p">.</span><span class="nf">Lock</span><span class="p">()</span>
+	<span class="nx">receiver</span><span class="p">.</span><span class="nx">m</span><span class="p">[</span><span class="nx">key</span><span class="p">]</span> <span class="p">=</span> <span class="nx">value</span>
+	<span class="nx">receiver</span><span class="p">.</span><span class="nx">lock</span><span class="p">.</span><span class="nf">Unlock</span><span class="p">()</span>
+<span class="p">}</span>
+<span class="kd">func</span> <span class="p">(</span><span class="nx">receiver</span> <span class="o">*</span><span class="nx">RWMutexMap</span><span class="p">)</span> <span class="nf">Del</span><span class="p">(</span><span class="nx">key</span> <span class="kt">string</span><span class="p">)</span> <span class="p">{</span>
+	<span class="nx">receiver</span><span class="p">.</span><span class="nx">lock</span><span class="p">.</span><span class="nf">Lock</span><span class="p">()</span>
+	<span class="nb">delete</span><span class="p">(</span><span class="nx">receiver</span><span class="p">.</span><span class="nx">m</span><span class="p">,</span> <span class="nx">key</span><span class="p">)</span>
+	<span class="nx">receiver</span><span class="p">.</span><span class="nx">lock</span><span class="p">.</span><span class="nf">Unlock</span><span class="p">()</span>
+<span class="p">}</span>
+</code></pre></div><p>上述代码中，将<code>lock sync.Mutex</code>字段替换成为了<code>lock sync.RWMutex</code>字段，并且将<code>Get()</code>方法转而使用读锁进行加锁，此时，当前的 <code>RWMutexMap</code>结构体就针对读多写少的并发情况有了很好的性能提升，</p>
+<h2 id="标准库的syncmap">标准库的<code>sync.Map</code><a href="#标准库的syncmap" class="anchor" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 7h3a5 5 0 0 1 5 5 5 5 0 0 1-5 5h-3m-6 0H6a5 5 0 0 1-5-5 5 5 0 0 1 5-5h3"></path><line x1="8" y1="12" x2="16" y2="12"></line></svg></a></h2>
+<p>标准库中提供了一种官方实现的线程安全的<code>map</code>结构，即<code>sync.Map</code>，该包虽然是线程安全的，但是使用场景很少，这个 <code>sync.Map</code>并不是用来替换内建的 <code>map</code>类型的，它只能被应用在一些特殊的场景里。官方文档指出可以用在以下场景：</p>
+<blockquote>
+<p>1.只会增长的缓存系统中，一个 key 只写入一次而被读很多次，即读多写少
+2.多个 goroutine 为不相交的键集读、写和重写键值对，即多个goroutineCRUD操作不同的key-value</p>
+</blockquote>
+<p>但是，最好在使用的时候根据场景首先进行性能测试后，再根据性能测试结果选用<code>sync.Map</code>或者<code>RWMutexMap </code>。
+<code>sync.Map</code>的实现，其针对<code>RWMutexMap </code>做了下面几个优化。</p>
+<ol>
+<li>空间换时间。通过冗余的两个数据结构（只读的 read 字段、可写的 dirty），来减少加锁对性能的影响。 对只读字段（read）的操作不需要加锁。</li>
+<li>优先从 read 字段读取、更新、删除，因为对 read 字段的读取不需要锁。</li>
+<li>动态调整。miss次数多了之后，将 dirty 数据提升为 read，避免总是从 dirty 中加锁读取。</li>
+<li>double-checking。加锁之后先还要再检查 read 字段，确定真的不存在才操作 dirty 字段。</li>
+<li>延迟删除。删除一个键值只是打标记，只有在提升 dirty字段为 read 字段的时候才清理删除的数据。</li>
+</ol>
+<p>既然<code>sync.Map</code>这么好，那么就来测试一下<code>MutexMap </code>，<code>RWMutexMap </code>，<code>sync.Map</code>的性能差距吧，下面我针对这两个结构体进行性能测试看看其在大量只读，只写，读写的情况下的性能如何（代码引用于<a href="https://www.jianshu.com/p/cffffa914381">goalng1.14不同场景下sync.Map、Mutex、RWMutex锁性能测试对比</a>）：</p>
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go"><span class="kn">package</span> <span class="nx">main</span>
+
+<span class="kn">import</span> <span class="p">(</span>
+	<span class="s">&#34;fmt&#34;</span>
+	<span class="s">&#34;sync&#34;</span>
+	<span class="s">&#34;testing&#34;</span>
+	<span class="s">&#34;time&#34;</span>
+<span class="p">)</span>
+
+<span class="kd">var</span> <span class="p">(</span>
+	<span class="nx">num</span>  <span class="p">=</span> <span class="mi">1000</span> <span class="o">*</span> <span class="mi">10</span>
+	<span class="nx">gnum</span> <span class="p">=</span> <span class="mi">1000</span>
+<span class="p">)</span>
+
+<span class="kd">func</span> <span class="nf">Test_main</span><span class="p">(</span><span class="nx">t</span> <span class="o">*</span><span class="nx">testing</span><span class="p">.</span><span class="nx">T</span><span class="p">)</span> <span class="p">{</span>
+	<span class="nx">count</span> <span class="o">:=</span> <span class="mi">10000</span>
+	<span class="nx">div</span> <span class="o">:=</span> <span class="nb">int</span><span class="p">(</span><span class="mi">50</span><span class="p">)</span> <span class="c1">//抽样写比例 1/5
+</span><span class="c1"></span>	<span class="nx">fmt</span><span class="p">.</span><span class="nf">Println</span><span class="p">(</span><span class="s">&#34;only read&#34;</span><span class="p">)</span>
+	<span class="nf">testRwmutexReadOnly</span><span class="p">(</span><span class="nx">count</span><span class="p">)</span>
+	<span class="nf">testMutexReadOnly</span><span class="p">(</span><span class="nx">count</span><span class="p">)</span>
+	<span class="c1">//test sync.map
+</span><span class="c1"></span>	<span class="nf">testSyncMapReadOnly</span><span class="p">(</span><span class="nx">count</span><span class="p">)</span>
+
+	<span class="nx">fmt</span><span class="p">.</span><span class="nf">Println</span><span class="p">(</span><span class="s">&#34;write and read&#34;</span><span class="p">)</span>
+	<span class="nf">testRwmutexWriteRead</span><span class="p">(</span><span class="nx">count</span><span class="p">,</span> <span class="nx">div</span><span class="p">)</span>
+	<span class="nf">testMutexWriteRead</span><span class="p">(</span><span class="nx">count</span><span class="p">,</span> <span class="nx">div</span><span class="p">)</span>
+	<span class="nf">testSyncMapWriteRead</span><span class="p">(</span><span class="nx">count</span><span class="p">,</span> <span class="nx">div</span><span class="p">)</span>
+
+	<span class="nx">fmt</span><span class="p">.</span><span class="nf">Println</span><span class="p">(</span><span class="s">&#34;write only&#34;</span><span class="p">)</span>
+	<span class="nf">testRwmutexWriteOnly</span><span class="p">(</span><span class="nx">count</span><span class="p">)</span>
+	<span class="nf">testMutexWriteOnly</span><span class="p">(</span><span class="nx">count</span><span class="p">)</span>
+	<span class="nf">testSyncMapWriteOnly</span><span class="p">(</span><span class="nx">count</span><span class="p">)</span>
+
+<span class="p">}</span>
+
+<span class="kd">func</span> <span class="nf">testRwmutexReadOnly</span><span class="p">(</span><span class="nx">count</span> <span class="kt">int</span><span class="p">)</span> <span class="p">{</span>
+	<span class="kd">var</span> <span class="nx">w</span> <span class="p">=</span> <span class="o">&amp;</span><span class="nx">sync</span><span class="p">.</span><span class="nx">WaitGroup</span><span class="p">{}</span>
+	<span class="kd">var</span> <span class="nx">rwmutexTmp</span> <span class="p">=</span> <span class="nf">newRwmutex</span><span class="p">(</span><span class="nx">count</span><span class="p">)</span>
+	<span class="nx">w</span><span class="p">.</span><span class="nf">Add</span><span class="p">(</span><span class="nx">gnum</span><span class="p">)</span>
+	<span class="nx">t1</span> <span class="o">:=</span> <span class="nx">time</span><span class="p">.</span><span class="nf">Now</span><span class="p">()</span>
+	<span class="k">for</span> <span class="nx">i</span> <span class="o">:=</span> <span class="mi">0</span><span class="p">;</span> <span class="nx">i</span> <span class="p">&lt;</span> <span class="nx">gnum</span><span class="p">;</span> <span class="nx">i</span><span class="o">++</span> <span class="p">{</span>
+		<span class="k">go</span> <span class="kd">func</span><span class="p">()</span> <span class="p">{</span>
+			<span class="k">defer</span> <span class="nx">w</span><span class="p">.</span><span class="nf">Done</span><span class="p">()</span>
+			<span class="k">for</span> <span class="nx">in</span> <span class="o">:=</span> <span class="mi">0</span><span class="p">;</span> <span class="nx">in</span> <span class="p">&lt;</span> <span class="nx">num</span><span class="p">;</span> <span class="nx">in</span><span class="o">++</span> <span class="p">{</span>
+				<span class="nx">rwmutexTmp</span><span class="p">.</span><span class="nf">get</span><span class="p">(</span><span class="nx">in</span><span class="p">)</span>
+			<span class="p">}</span>
+		<span class="p">}()</span>
+	<span class="p">}</span>
+	<span class="nx">w</span><span class="p">.</span><span class="nf">Wait</span><span class="p">()</span>
+	<span class="nx">fmt</span><span class="p">.</span><span class="nf">Println</span><span class="p">(</span><span class="s">&#34;testRwmutexReadOnly cost:&#34;</span><span class="p">,</span> <span class="nx">time</span><span class="p">.</span><span class="nf">Now</span><span class="p">().</span><span class="nf">Sub</span><span class="p">(</span><span class="nx">t1</span><span class="p">).</span><span class="nf">String</span><span class="p">())</span>
+<span class="p">}</span>
+
+<span class="kd">func</span> <span class="nf">testRwmutexWriteOnly</span><span class="p">(</span><span class="nx">count</span> <span class="kt">int</span><span class="p">)</span> <span class="p">{</span>
+	<span class="kd">var</span> <span class="nx">w</span> <span class="p">=</span> <span class="o">&amp;</span><span class="nx">sync</span><span class="p">.</span><span class="nx">WaitGroup</span><span class="p">{}</span>
+	<span class="kd">var</span> <span class="nx">rwmutexTmp</span> <span class="p">=</span> <span class="nf">newRwmutex</span><span class="p">(</span><span class="nx">count</span><span class="p">)</span>
+	<span class="nx">w</span><span class="p">.</span><span class="nf">Add</span><span class="p">(</span><span class="nx">gnum</span><span class="p">)</span>
+	<span class="nx">t1</span> <span class="o">:=</span> <span class="nx">time</span><span class="p">.</span><span class="nf">Now</span><span class="p">()</span>
+	<span class="k">for</span> <span class="nx">i</span> <span class="o">:=</span> <span class="mi">0</span><span class="p">;</span> <span class="nx">i</span> <span class="p">&lt;</span> <span class="nx">gnum</span><span class="p">;</span> <span class="nx">i</span><span class="o">++</span> <span class="p">{</span>
+		<span class="k">go</span> <span class="kd">func</span><span class="p">()</span> <span class="p">{</span>
+			<span class="k">defer</span> <span class="nx">w</span><span class="p">.</span><span class="nf">Done</span><span class="p">()</span>
+			<span class="k">for</span> <span class="nx">in</span> <span class="o">:=</span> <span class="mi">0</span><span class="p">;</span> <span class="nx">in</span> <span class="p">&lt;</span> <span class="nx">num</span><span class="p">;</span> <span class="nx">in</span><span class="o">++</span> <span class="p">{</span>
+				<span class="nx">rwmutexTmp</span><span class="p">.</span><span class="nf">set</span><span class="p">(</span><span class="nx">in</span><span class="p">,</span> <span class="nx">in</span><span class="p">)</span>
+			<span class="p">}</span>
+		<span class="p">}()</span>
+	<span class="p">}</span>
+	<span class="nx">w</span><span class="p">.</span><span class="nf">Wait</span><span class="p">()</span>
+	<span class="nx">fmt</span><span class="p">.</span><span class="nf">Println</span><span class="p">(</span><span class="s">&#34;testRwmutexWriteOnly cost:&#34;</span><span class="p">,</span> <span class="nx">time</span><span class="p">.</span><span class="nf">Now</span><span class="p">().</span><span class="nf">Sub</span><span class="p">(</span><span class="nx">t1</span><span class="p">).</span><span class="nf">String</span><span class="p">())</span>
+<span class="p">}</span>
+
+<span class="kd">func</span> <span class="nf">testRwmutexWriteRead</span><span class="p">(</span><span class="nx">count</span><span class="p">,</span> <span class="nx">div</span> <span class="kt">int</span><span class="p">)</span> <span class="p">{</span>
+	<span class="kd">var</span> <span class="nx">w</span> <span class="p">=</span> <span class="o">&amp;</span><span class="nx">sync</span><span class="p">.</span><span class="nx">WaitGroup</span><span class="p">{}</span>
+	<span class="kd">var</span> <span class="nx">rwmutexTmp</span> <span class="p">=</span> <span class="nf">newRwmutex</span><span class="p">(</span><span class="nx">count</span><span class="p">)</span>
+	<span class="nx">w</span><span class="p">.</span><span class="nf">Add</span><span class="p">(</span><span class="nx">gnum</span><span class="p">)</span>
+	<span class="nx">t1</span> <span class="o">:=</span> <span class="nx">time</span><span class="p">.</span><span class="nf">Now</span><span class="p">()</span>
+	<span class="k">for</span> <span class="nx">i</span> <span class="o">:=</span> <span class="mi">0</span><span class="p">;</span> <span class="nx">i</span> <span class="p">&lt;</span> <span class="nx">gnum</span><span class="p">;</span> <span class="nx">i</span><span class="o">++</span> <span class="p">{</span>
+		<span class="k">if</span> <span class="nx">i</span><span class="o">%</span><span class="nx">div</span> <span class="o">!=</span> <span class="mi">0</span> <span class="p">{</span>
+			<span class="k">go</span> <span class="kd">func</span><span class="p">()</span> <span class="p">{</span>
+				<span class="k">defer</span> <span class="nx">w</span><span class="p">.</span><span class="nf">Done</span><span class="p">()</span>
+				<span class="k">for</span> <span class="nx">in</span> <span class="o">:=</span> <span class="mi">0</span><span class="p">;</span> <span class="nx">in</span> <span class="p">&lt;</span> <span class="nx">num</span><span class="p">;</span> <span class="nx">in</span><span class="o">++</span> <span class="p">{</span>
+					<span class="nx">rwmutexTmp</span><span class="p">.</span><span class="nf">get</span><span class="p">(</span><span class="nx">in</span><span class="p">)</span>
+				<span class="p">}</span>
+			<span class="p">}()</span>
+		<span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+			<span class="k">go</span> <span class="kd">func</span><span class="p">()</span> <span class="p">{</span>
+				<span class="k">defer</span> <span class="nx">w</span><span class="p">.</span><span class="nf">Done</span><span class="p">()</span>
+				<span class="k">for</span> <span class="nx">in</span> <span class="o">:=</span> <span class="mi">0</span><span class="p">;</span> <span class="nx">in</span> <span class="p">&lt;</span> <span class="nx">num</span><span class="p">;</span> <span class="nx">in</span><span class="o">++</span> <span class="p">{</span>
+					<span class="nx">rwmutexTmp</span><span class="p">.</span><span class="nf">set</span><span class="p">(</span><span class="nx">in</span><span class="p">,</span> <span class="nx">in</span><span class="p">)</span>
+				<span class="p">}</span>
+			<span class="p">}()</span>
+		<span class="p">}</span>
+	<span class="p">}</span>
+	<span class="nx">w</span><span class="p">.</span><span class="nf">Wait</span><span class="p">()</span>
+	<span class="nx">fmt</span><span class="p">.</span><span class="nf">Println</span><span class="p">(</span><span class="s">&#34;testRwmutexWriteRead cost:&#34;</span><span class="p">,</span> <span class="nx">time</span><span class="p">.</span><span class="nf">Now</span><span class="p">().</span><span class="nf">Sub</span><span class="p">(</span><span class="nx">t1</span><span class="p">).</span><span class="nf">String</span><span class="p">())</span>
+<span class="p">}</span>
+
+<span class="kd">func</span> <span class="nf">testMutexReadOnly</span><span class="p">(</span><span class="nx">count</span> <span class="kt">int</span><span class="p">)</span> <span class="p">{</span>
+	<span class="kd">var</span> <span class="nx">w</span> <span class="p">=</span> <span class="o">&amp;</span><span class="nx">sync</span><span class="p">.</span><span class="nx">WaitGroup</span><span class="p">{}</span>
+	<span class="kd">var</span> <span class="nx">mutexTmp</span> <span class="p">=</span> <span class="nf">newMutex</span><span class="p">(</span><span class="nx">count</span><span class="p">)</span>
+	<span class="nx">w</span><span class="p">.</span><span class="nf">Add</span><span class="p">(</span><span class="nx">gnum</span><span class="p">)</span>
+
+	<span class="nx">t1</span> <span class="o">:=</span> <span class="nx">time</span><span class="p">.</span><span class="nf">Now</span><span class="p">()</span>
+	<span class="k">for</span> <span class="nx">i</span> <span class="o">:=</span> <span class="mi">0</span><span class="p">;</span> <span class="nx">i</span> <span class="p">&lt;</span> <span class="nx">gnum</span><span class="p">;</span> <span class="nx">i</span><span class="o">++</span> <span class="p">{</span>
+		<span class="k">go</span> <span class="kd">func</span><span class="p">()</span> <span class="p">{</span>
+			<span class="k">defer</span> <span class="nx">w</span><span class="p">.</span><span class="nf">Done</span><span class="p">()</span>
+			<span class="k">for</span> <span class="nx">in</span> <span class="o">:=</span> <span class="mi">0</span><span class="p">;</span> <span class="nx">in</span> <span class="p">&lt;</span> <span class="nx">num</span><span class="p">;</span> <span class="nx">in</span><span class="o">++</span> <span class="p">{</span>
+				<span class="nx">mutexTmp</span><span class="p">.</span><span class="nf">get</span><span class="p">(</span><span class="nx">in</span><span class="p">)</span>
+			<span class="p">}</span>
+		<span class="p">}()</span>
+	<span class="p">}</span>
+	<span class="nx">w</span><span class="p">.</span><span class="nf">Wait</span><span class="p">()</span>
+	<span class="nx">fmt</span><span class="p">.</span><span class="nf">Println</span><span class="p">(</span><span class="s">&#34;testMutexReadOnly cost:&#34;</span><span class="p">,</span> <span class="nx">time</span><span class="p">.</span><span class="nf">Now</span><span class="p">().</span><span class="nf">Sub</span><span class="p">(</span><span class="nx">t1</span><span class="p">).</span><span class="nf">String</span><span class="p">())</span>
+<span class="p">}</span>
+
+<span class="kd">func</span> <span class="nf">testMutexWriteOnly</span><span class="p">(</span><span class="nx">count</span> <span class="kt">int</span><span class="p">)</span> <span class="p">{</span>
+	<span class="kd">var</span> <span class="nx">w</span> <span class="p">=</span> <span class="o">&amp;</span><span class="nx">sync</span><span class="p">.</span><span class="nx">WaitGroup</span><span class="p">{}</span>
+	<span class="kd">var</span> <span class="nx">mutexTmp</span> <span class="p">=</span> <span class="nf">newMutex</span><span class="p">(</span><span class="nx">count</span><span class="p">)</span>
+	<span class="nx">w</span><span class="p">.</span><span class="nf">Add</span><span class="p">(</span><span class="nx">gnum</span><span class="p">)</span>
+
+	<span class="nx">t1</span> <span class="o">:=</span> <span class="nx">time</span><span class="p">.</span><span class="nf">Now</span><span class="p">()</span>
+	<span class="k">for</span> <span class="nx">i</span> <span class="o">:=</span> <span class="mi">0</span><span class="p">;</span> <span class="nx">i</span> <span class="p">&lt;</span> <span class="nx">gnum</span><span class="p">;</span> <span class="nx">i</span><span class="o">++</span> <span class="p">{</span>
+		<span class="k">go</span> <span class="kd">func</span><span class="p">()</span> <span class="p">{</span>
+			<span class="k">defer</span> <span class="nx">w</span><span class="p">.</span><span class="nf">Done</span><span class="p">()</span>
+			<span class="k">for</span> <span class="nx">in</span> <span class="o">:=</span> <span class="mi">0</span><span class="p">;</span> <span class="nx">in</span> <span class="p">&lt;</span> <span class="nx">num</span><span class="p">;</span> <span class="nx">in</span><span class="o">++</span> <span class="p">{</span>
+				<span class="nx">mutexTmp</span><span class="p">.</span><span class="nf">set</span><span class="p">(</span><span class="nx">in</span><span class="p">,</span> <span class="nx">in</span><span class="p">)</span>
+			<span class="p">}</span>
+		<span class="p">}()</span>
+	<span class="p">}</span>
+	<span class="nx">w</span><span class="p">.</span><span class="nf">Wait</span><span class="p">()</span>
+	<span class="nx">fmt</span><span class="p">.</span><span class="nf">Println</span><span class="p">(</span><span class="s">&#34;testMutexWriteOnly cost:&#34;</span><span class="p">,</span> <span class="nx">time</span><span class="p">.</span><span class="nf">Now</span><span class="p">().</span><span class="nf">Sub</span><span class="p">(</span><span class="nx">t1</span><span class="p">).</span><span class="nf">String</span><span class="p">())</span>
+<span class="p">}</span>
+
+<span class="kd">func</span> <span class="nf">testMutexWriteRead</span><span class="p">(</span><span class="nx">count</span><span class="p">,</span> <span class="nx">div</span> <span class="kt">int</span><span class="p">)</span> <span class="p">{</span>
+	<span class="kd">var</span> <span class="nx">w</span> <span class="p">=</span> <span class="o">&amp;</span><span class="nx">sync</span><span class="p">.</span><span class="nx">WaitGroup</span><span class="p">{}</span>
+	<span class="kd">var</span> <span class="nx">mutexTmp</span> <span class="p">=</span> <span class="nf">newMutex</span><span class="p">(</span><span class="nx">count</span><span class="p">)</span>
+	<span class="nx">w</span><span class="p">.</span><span class="nf">Add</span><span class="p">(</span><span class="nx">gnum</span><span class="p">)</span>
+	<span class="nx">t1</span> <span class="o">:=</span> <span class="nx">time</span><span class="p">.</span><span class="nf">Now</span><span class="p">()</span>
+	<span class="k">for</span> <span class="nx">i</span> <span class="o">:=</span> <span class="mi">0</span><span class="p">;</span> <span class="nx">i</span> <span class="p">&lt;</span> <span class="nx">gnum</span><span class="p">;</span> <span class="nx">i</span><span class="o">++</span> <span class="p">{</span>
+		<span class="k">if</span> <span class="nx">i</span><span class="o">%</span><span class="nx">div</span> <span class="o">!=</span> <span class="mi">0</span> <span class="p">{</span>
+			<span class="k">go</span> <span class="kd">func</span><span class="p">()</span> <span class="p">{</span>
+				<span class="k">defer</span> <span class="nx">w</span><span class="p">.</span><span class="nf">Done</span><span class="p">()</span>
+				<span class="k">for</span> <span class="nx">in</span> <span class="o">:=</span> <span class="mi">0</span><span class="p">;</span> <span class="nx">in</span> <span class="p">&lt;</span> <span class="nx">num</span><span class="p">;</span> <span class="nx">in</span><span class="o">++</span> <span class="p">{</span>
+					<span class="nx">mutexTmp</span><span class="p">.</span><span class="nf">get</span><span class="p">(</span><span class="nx">in</span><span class="p">)</span>
+				<span class="p">}</span>
+			<span class="p">}()</span>
+		<span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+			<span class="k">go</span> <span class="kd">func</span><span class="p">()</span> <span class="p">{</span>
+				<span class="k">defer</span> <span class="nx">w</span><span class="p">.</span><span class="nf">Done</span><span class="p">()</span>
+				<span class="k">for</span> <span class="nx">in</span> <span class="o">:=</span> <span class="mi">0</span><span class="p">;</span> <span class="nx">in</span> <span class="p">&lt;</span> <span class="nx">num</span><span class="p">;</span> <span class="nx">in</span><span class="o">++</span> <span class="p">{</span>
+					<span class="nx">mutexTmp</span><span class="p">.</span><span class="nf">set</span><span class="p">(</span><span class="nx">in</span><span class="p">,</span> <span class="nx">in</span><span class="p">)</span>
+				<span class="p">}</span>
+			<span class="p">}()</span>
+		<span class="p">}</span>
+
+	<span class="p">}</span>
+	<span class="nx">w</span><span class="p">.</span><span class="nf">Wait</span><span class="p">()</span>
+	<span class="nx">fmt</span><span class="p">.</span><span class="nf">Println</span><span class="p">(</span><span class="s">&#34;testMutexWriteRead cost:&#34;</span><span class="p">,</span> <span class="nx">time</span><span class="p">.</span><span class="nf">Now</span><span class="p">().</span><span class="nf">Sub</span><span class="p">(</span><span class="nx">t1</span><span class="p">).</span><span class="nf">String</span><span class="p">())</span>
+<span class="p">}</span>
+
+<span class="kd">func</span> <span class="nf">testSyncMapReadOnly</span><span class="p">(</span><span class="nx">count</span> <span class="kt">int</span><span class="p">)</span> <span class="p">{</span>
+	<span class="kd">var</span> <span class="nx">w</span> <span class="p">=</span> <span class="o">&amp;</span><span class="nx">sync</span><span class="p">.</span><span class="nx">WaitGroup</span><span class="p">{}</span>
+	<span class="kd">var</span> <span class="nx">mutexTmp</span> <span class="p">=</span> <span class="nf">newSyncMap</span><span class="p">(</span><span class="nx">count</span><span class="p">)</span>
+	<span class="nx">w</span><span class="p">.</span><span class="nf">Add</span><span class="p">(</span><span class="nx">gnum</span><span class="p">)</span>
+
+	<span class="nx">t1</span> <span class="o">:=</span> <span class="nx">time</span><span class="p">.</span><span class="nf">Now</span><span class="p">()</span>
+	<span class="k">for</span> <span class="nx">i</span> <span class="o">:=</span> <span class="mi">0</span><span class="p">;</span> <span class="nx">i</span> <span class="p">&lt;</span> <span class="nx">gnum</span><span class="p">;</span> <span class="nx">i</span><span class="o">++</span> <span class="p">{</span>
+		<span class="k">go</span> <span class="kd">func</span><span class="p">()</span> <span class="p">{</span>
+			<span class="k">defer</span> <span class="nx">w</span><span class="p">.</span><span class="nf">Done</span><span class="p">()</span>
+			<span class="k">for</span> <span class="nx">in</span> <span class="o">:=</span> <span class="mi">0</span><span class="p">;</span> <span class="nx">in</span> <span class="p">&lt;</span> <span class="nx">num</span><span class="p">;</span> <span class="nx">in</span><span class="o">++</span> <span class="p">{</span>
+				<span class="nx">mutexTmp</span><span class="p">.</span><span class="nf">Load</span><span class="p">(</span><span class="nx">in</span><span class="p">)</span>
+			<span class="p">}</span>
+		<span class="p">}()</span>
+	<span class="p">}</span>
+	<span class="nx">w</span><span class="p">.</span><span class="nf">Wait</span><span class="p">()</span>
+	<span class="nx">fmt</span><span class="p">.</span><span class="nf">Println</span><span class="p">(</span><span class="s">&#34;testSyncMapReadOnly cost:&#34;</span><span class="p">,</span> <span class="nx">time</span><span class="p">.</span><span class="nf">Now</span><span class="p">().</span><span class="nf">Sub</span><span class="p">(</span><span class="nx">t1</span><span class="p">).</span><span class="nf">String</span><span class="p">())</span>
+<span class="p">}</span>
+
+<span class="kd">func</span> <span class="nf">testSyncMapWriteOnly</span><span class="p">(</span><span class="nx">count</span> <span class="kt">int</span><span class="p">)</span> <span class="p">{</span>
+	<span class="kd">var</span> <span class="nx">w</span> <span class="p">=</span> <span class="o">&amp;</span><span class="nx">sync</span><span class="p">.</span><span class="nx">WaitGroup</span><span class="p">{}</span>
+	<span class="kd">var</span> <span class="nx">mutexTmp</span> <span class="p">=</span> <span class="nf">newSyncMap</span><span class="p">(</span><span class="nx">count</span><span class="p">)</span>
+	<span class="nx">w</span><span class="p">.</span><span class="nf">Add</span><span class="p">(</span><span class="nx">gnum</span><span class="p">)</span>
+
+	<span class="nx">t1</span> <span class="o">:=</span> <span class="nx">time</span><span class="p">.</span><span class="nf">Now</span><span class="p">()</span>
+	<span class="k">for</span> <span class="nx">i</span> <span class="o">:=</span> <span class="mi">0</span><span class="p">;</span> <span class="nx">i</span> <span class="p">&lt;</span> <span class="nx">gnum</span><span class="p">;</span> <span class="nx">i</span><span class="o">++</span> <span class="p">{</span>
+		<span class="k">go</span> <span class="kd">func</span><span class="p">()</span> <span class="p">{</span>
+			<span class="k">defer</span> <span class="nx">w</span><span class="p">.</span><span class="nf">Done</span><span class="p">()</span>
+			<span class="k">for</span> <span class="nx">in</span> <span class="o">:=</span> <span class="mi">0</span><span class="p">;</span> <span class="nx">in</span> <span class="p">&lt;</span> <span class="nx">num</span><span class="p">;</span> <span class="nx">in</span><span class="o">++</span> <span class="p">{</span>
+				<span class="nx">mutexTmp</span><span class="p">.</span><span class="nf">Store</span><span class="p">(</span><span class="nx">in</span><span class="p">,</span> <span class="nx">in</span><span class="p">)</span>
+			<span class="p">}</span>
+		<span class="p">}()</span>
+	<span class="p">}</span>
+	<span class="nx">w</span><span class="p">.</span><span class="nf">Wait</span><span class="p">()</span>
+	<span class="nx">fmt</span><span class="p">.</span><span class="nf">Println</span><span class="p">(</span><span class="s">&#34;testSyncMapWriteOnly cost:&#34;</span><span class="p">,</span> <span class="nx">time</span><span class="p">.</span><span class="nf">Now</span><span class="p">().</span><span class="nf">Sub</span><span class="p">(</span><span class="nx">t1</span><span class="p">).</span><span class="nf">String</span><span class="p">())</span>
+<span class="p">}</span>
+
+<span class="kd">func</span> <span class="nf">testSyncMapWriteRead</span><span class="p">(</span><span class="nx">count</span><span class="p">,</span> <span class="nx">div</span> <span class="kt">int</span><span class="p">)</span> <span class="p">{</span>
+	<span class="kd">var</span> <span class="nx">w</span> <span class="p">=</span> <span class="o">&amp;</span><span class="nx">sync</span><span class="p">.</span><span class="nx">WaitGroup</span><span class="p">{}</span>
+	<span class="kd">var</span> <span class="nx">mutexTmp</span> <span class="p">=</span> <span class="nf">newSyncMap</span><span class="p">(</span><span class="nx">count</span><span class="p">)</span>
+	<span class="nx">w</span><span class="p">.</span><span class="nf">Add</span><span class="p">(</span><span class="nx">gnum</span><span class="p">)</span>
+	<span class="nx">t1</span> <span class="o">:=</span> <span class="nx">time</span><span class="p">.</span><span class="nf">Now</span><span class="p">()</span>
+	<span class="k">for</span> <span class="nx">i</span> <span class="o">:=</span> <span class="mi">0</span><span class="p">;</span> <span class="nx">i</span> <span class="p">&lt;</span> <span class="nx">gnum</span><span class="p">;</span> <span class="nx">i</span><span class="o">++</span> <span class="p">{</span>
+		<span class="k">if</span> <span class="nx">i</span><span class="o">%</span><span class="nx">div</span> <span class="o">!=</span> <span class="mi">0</span> <span class="p">{</span>
+			<span class="k">go</span> <span class="kd">func</span><span class="p">()</span> <span class="p">{</span>
+				<span class="k">defer</span> <span class="nx">w</span><span class="p">.</span><span class="nf">Done</span><span class="p">()</span>
+				<span class="k">for</span> <span class="nx">in</span> <span class="o">:=</span> <span class="mi">0</span><span class="p">;</span> <span class="nx">in</span> <span class="p">&lt;</span> <span class="nx">num</span><span class="p">;</span> <span class="nx">in</span><span class="o">++</span> <span class="p">{</span>
+					<span class="nx">mutexTmp</span><span class="p">.</span><span class="nf">Load</span><span class="p">(</span><span class="nx">in</span><span class="p">)</span>
+				<span class="p">}</span>
+			<span class="p">}()</span>
+		<span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+			<span class="k">go</span> <span class="kd">func</span><span class="p">()</span> <span class="p">{</span>
+				<span class="k">defer</span> <span class="nx">w</span><span class="p">.</span><span class="nf">Done</span><span class="p">()</span>
+				<span class="k">for</span> <span class="nx">in</span> <span class="o">:=</span> <span class="mi">0</span><span class="p">;</span> <span class="nx">in</span> <span class="p">&lt;</span> <span class="nx">num</span><span class="p">;</span> <span class="nx">in</span><span class="o">++</span> <span class="p">{</span>
+					<span class="nx">mutexTmp</span><span class="p">.</span><span class="nf">Store</span><span class="p">(</span><span class="nx">in</span><span class="p">,</span> <span class="nx">in</span><span class="p">)</span>
+				<span class="p">}</span>
+			<span class="p">}()</span>
+		<span class="p">}</span>
+
+	<span class="p">}</span>
+	<span class="nx">w</span><span class="p">.</span><span class="nf">Wait</span><span class="p">()</span>
+	<span class="nx">fmt</span><span class="p">.</span><span class="nf">Println</span><span class="p">(</span><span class="s">&#34;testSyncMapWriteRead cost:&#34;</span><span class="p">,</span> <span class="nx">time</span><span class="p">.</span><span class="nf">Now</span><span class="p">().</span><span class="nf">Sub</span><span class="p">(</span><span class="nx">t1</span><span class="p">).</span><span class="nf">String</span><span class="p">())</span>
+<span class="p">}</span>
+
+<span class="kd">func</span> <span class="nf">newRwmutex</span><span class="p">(</span><span class="nx">count</span> <span class="kt">int</span><span class="p">)</span> <span class="o">*</span><span class="nx">rwmutex</span> <span class="p">{</span>
+	<span class="kd">var</span> <span class="nx">t</span> <span class="p">=</span> <span class="o">&amp;</span><span class="nx">rwmutex</span><span class="p">{}</span>
+	<span class="nx">t</span><span class="p">.</span><span class="nx">mu</span> <span class="p">=</span> <span class="o">&amp;</span><span class="nx">sync</span><span class="p">.</span><span class="nx">RWMutex</span><span class="p">{}</span>
+	<span class="nx">t</span><span class="p">.</span><span class="nx">ipmap</span> <span class="p">=</span> <span class="nb">make</span><span class="p">(</span><span class="kd">map</span><span class="p">[</span><span class="kt">int</span><span class="p">]</span><span class="kt">int</span><span class="p">,</span> <span class="nx">count</span><span class="p">)</span>
+
+	<span class="k">for</span> <span class="nx">i</span> <span class="o">:=</span> <span class="mi">0</span><span class="p">;</span> <span class="nx">i</span> <span class="p">&lt;</span> <span class="nx">count</span><span class="p">;</span> <span class="nx">i</span><span class="o">++</span> <span class="p">{</span>
+		<span class="nx">t</span><span class="p">.</span><span class="nx">ipmap</span><span class="p">[</span><span class="nx">i</span><span class="p">]</span> <span class="p">=</span> <span class="mi">0</span>
+	<span class="p">}</span>
+	<span class="k">return</span> <span class="nx">t</span>
+<span class="p">}</span>
+
+<span class="kd">type</span> <span class="nx">rwmutex</span> <span class="kd">struct</span> <span class="p">{</span>
+	<span class="nx">mu</span>    <span class="o">*</span><span class="nx">sync</span><span class="p">.</span><span class="nx">RWMutex</span>
+	<span class="nx">ipmap</span> <span class="kd">map</span><span class="p">[</span><span class="kt">int</span><span class="p">]</span><span class="kt">int</span>
+<span class="p">}</span>
+
+<span class="kd">func</span> <span class="p">(</span><span class="nx">t</span> <span class="o">*</span><span class="nx">rwmutex</span><span class="p">)</span> <span class="nf">get</span><span class="p">(</span><span class="nx">i</span> <span class="kt">int</span><span class="p">)</span> <span class="kt">int</span> <span class="p">{</span>
+	<span class="nx">t</span><span class="p">.</span><span class="nx">mu</span><span class="p">.</span><span class="nf">RLock</span><span class="p">()</span>
+	<span class="k">defer</span> <span class="nx">t</span><span class="p">.</span><span class="nx">mu</span><span class="p">.</span><span class="nf">RUnlock</span><span class="p">()</span>
+
+	<span class="k">return</span> <span class="nx">t</span><span class="p">.</span><span class="nx">ipmap</span><span class="p">[</span><span class="nx">i</span><span class="p">]</span>
+<span class="p">}</span>
+
+<span class="kd">func</span> <span class="p">(</span><span class="nx">t</span> <span class="o">*</span><span class="nx">rwmutex</span><span class="p">)</span> <span class="nf">set</span><span class="p">(</span><span class="nx">k</span><span class="p">,</span> <span class="nx">v</span> <span class="kt">int</span><span class="p">)</span> <span class="p">{</span>
+	<span class="nx">t</span><span class="p">.</span><span class="nx">mu</span><span class="p">.</span><span class="nf">Lock</span><span class="p">()</span>
+	<span class="k">defer</span> <span class="nx">t</span><span class="p">.</span><span class="nx">mu</span><span class="p">.</span><span class="nf">Unlock</span><span class="p">()</span>
+
+	<span class="nx">t</span><span class="p">.</span><span class="nx">ipmap</span><span class="p">[</span><span class="nx">k</span><span class="p">]</span> <span class="p">=</span> <span class="nx">v</span>
+<span class="p">}</span>
+
+<span class="kd">func</span> <span class="nf">newMutex</span><span class="p">(</span><span class="nx">count</span> <span class="kt">int</span><span class="p">)</span> <span class="o">*</span><span class="nx">mutex</span> <span class="p">{</span>
+	<span class="kd">var</span> <span class="nx">t</span> <span class="p">=</span> <span class="o">&amp;</span><span class="nx">mutex</span><span class="p">{}</span>
+	<span class="nx">t</span><span class="p">.</span><span class="nx">mu</span> <span class="p">=</span> <span class="o">&amp;</span><span class="nx">sync</span><span class="p">.</span><span class="nx">Mutex</span><span class="p">{}</span>
+	<span class="nx">t</span><span class="p">.</span><span class="nx">ipmap</span> <span class="p">=</span> <span class="nb">make</span><span class="p">(</span><span class="kd">map</span><span class="p">[</span><span class="kt">int</span><span class="p">]</span><span class="kt">int</span><span class="p">,</span> <span class="nx">count</span><span class="p">)</span>
+
+	<span class="k">for</span> <span class="nx">i</span> <span class="o">:=</span> <span class="mi">0</span><span class="p">;</span> <span class="nx">i</span> <span class="p">&lt;</span> <span class="nx">count</span><span class="p">;</span> <span class="nx">i</span><span class="o">++</span> <span class="p">{</span>
+		<span class="nx">t</span><span class="p">.</span><span class="nx">ipmap</span><span class="p">[</span><span class="nx">i</span><span class="p">]</span> <span class="p">=</span> <span class="mi">0</span>
+	<span class="p">}</span>
+	<span class="k">return</span> <span class="nx">t</span>
+<span class="p">}</span>
+
+<span class="kd">func</span> <span class="nf">newSyncMap</span><span class="p">(</span><span class="nx">count</span> <span class="kt">int</span><span class="p">)</span> <span class="o">*</span><span class="nx">sync</span><span class="p">.</span><span class="nx">Map</span> <span class="p">{</span>
+	<span class="kd">var</span> <span class="nx">t</span> <span class="p">=</span> <span class="o">&amp;</span><span class="nx">sync</span><span class="p">.</span><span class="nx">Map</span><span class="p">{}</span>
+
+	<span class="k">for</span> <span class="nx">i</span> <span class="o">:=</span> <span class="mi">0</span><span class="p">;</span> <span class="nx">i</span> <span class="p">&lt;</span> <span class="nx">count</span><span class="p">;</span> <span class="nx">i</span><span class="o">++</span> <span class="p">{</span>
+		<span class="nx">t</span><span class="p">.</span><span class="nf">Store</span><span class="p">(</span><span class="nx">i</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+	<span class="p">}</span>
+	<span class="k">return</span> <span class="nx">t</span>
+<span class="p">}</span>
+
+<span class="kd">type</span> <span class="nx">mutex</span> <span class="kd">struct</span> <span class="p">{</span>
+	<span class="nx">mu</span>    <span class="o">*</span><span class="nx">sync</span><span class="p">.</span><span class="nx">Mutex</span>
+	<span class="nx">ipmap</span> <span class="kd">map</span><span class="p">[</span><span class="kt">int</span><span class="p">]</span><span class="kt">int</span>
+<span class="p">}</span>
+
+<span class="kd">func</span> <span class="p">(</span><span class="nx">t</span> <span class="o">*</span><span class="nx">mutex</span><span class="p">)</span> <span class="nf">get</span><span class="p">(</span><span class="nx">i</span> <span class="kt">int</span><span class="p">)</span> <span class="kt">int</span> <span class="p">{</span>
+	<span class="nx">t</span><span class="p">.</span><span class="nx">mu</span><span class="p">.</span><span class="nf">Lock</span><span class="p">()</span>
+	<span class="k">defer</span> <span class="nx">t</span><span class="p">.</span><span class="nx">mu</span><span class="p">.</span><span class="nf">Unlock</span><span class="p">()</span>
+
+	<span class="k">return</span> <span class="nx">t</span><span class="p">.</span><span class="nx">ipmap</span><span class="p">[</span><span class="nx">i</span><span class="p">]</span>
+<span class="p">}</span>
+
+<span class="kd">func</span> <span class="p">(</span><span class="nx">t</span> <span class="o">*</span><span class="nx">mutex</span><span class="p">)</span> <span class="nf">set</span><span class="p">(</span><span class="nx">k</span><span class="p">,</span> <span class="nx">v</span> <span class="kt">int</span><span class="p">)</span> <span class="p">{</span>
+	<span class="nx">t</span><span class="p">.</span><span class="nx">mu</span><span class="p">.</span><span class="nf">Lock</span><span class="p">()</span>
+	<span class="k">defer</span> <span class="nx">t</span><span class="p">.</span><span class="nx">mu</span><span class="p">.</span><span class="nf">Unlock</span><span class="p">()</span>
+
+	<span class="nx">k</span> <span class="p">=</span> <span class="nx">k</span> <span class="o">%</span> <span class="mi">100</span>
+	<span class="nx">t</span><span class="p">.</span><span class="nx">ipmap</span><span class="p">[</span><span class="nx">k</span><span class="p">]</span> <span class="p">=</span> <span class="nx">v</span>
+<span class="p">}</span>
+<span class="c1">// only read
+</span><span class="c1">// testRwmutexReadOnly cost: 346.72604ms
+</span><span class="c1">// testMutexReadOnly cost: 1.56353484s
+</span><span class="c1">// testSyncMapReadOnly cost: 94.436269ms
+</span><span class="c1">// write and read
+</span><span class="c1">// testRwmutexWriteRead cost: 511.433544ms
+</span><span class="c1">// testMutexWriteRead cost: 1.439301381s
+</span><span class="c1">// testSyncMapWriteRead cost: 106.220371ms
+</span><span class="c1">// write only
+</span><span class="c1">// testRwmutexWriteOnly cost: 2.579502195s
+</span><span class="c1">// testMutexWriteOnly cost: 1.922190051s
+</span><span class="c1">// testSyncMapWriteOnly cost: 4.177583278s
+</span></code></pre></div><p>结论：</p>
+<blockquote>
+<p>只读场景：sync.map &gt; rwmutex &raquo; mutex
+读写场景（边读边写）：rwmutex &gt; mutex &raquo; sync.map
+读写场景（读80% 写20%）：sync.map &gt; rwmutex &gt; mutex
+读写场景（读98% 写2%）：sync.map &gt; rwmutex &raquo; mutex
+只写场景：sync.map &raquo; mutex &gt; rwmutex</p>
+</blockquote>
+<h2 id="使用环境不负责任推荐">使用环境不负责任推荐<a href="#使用环境不负责任推荐" class="anchor" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 7h3a5 5 0 0 1 5 5 5 5 0 0 1-5 5h-3m-6 0H6a5 5 0 0 1-5-5 5 5 0 0 1 5-5h3"></path><line x1="8" y1="12" x2="16" y2="12"></line></svg></a></h2>
+<p>关于<code>MutexMap </code>，<code>RWMutexMap </code>，<code>sync.Map</code>的选择问题，其实不一定只能看上述的测试结论，还需要根据应用场合以及实际情况来使用，根据我自己的情况来看的话，有以下几个方面可以考虑，只是我个人见解。</p>
+<ol>
+<li>由于<code>sync.Map</code>的通用性的问题，所以返回的值均为<code>interface{}</code>类型，这样在我们进行一些操作的时候就会需要不断的去断言他，导致麻烦，此时如果性能要求不是特别高的情况下可以使用<code>RWMutexMap </code>用作专用性替换，这样可以免去了断言的一些性能损耗和麻烦。</li>
+<li>之前看过一篇文章，<code>RWMutexMap </code>在并发量异常庞大的时候性能下降会很快，比如1000万，所以如果高并发的时候尽可能采用<code>sync.Map</code></li>
+<li>当读写均多的时候<code>sync.Map</code>就显得力不从心，因为其内部实现原因需要针对只读<code>map</code>进行适时更换，如果一旦写入过多，就会导致更换的过于频繁，但是<code>RWMutexMap </code>就不会产生这个问题，除扩容和写锁的性能下降外，基本上没有什么其他损耗。</li>
+<li>如果<code>map</code>遍历情况过多请使用<code>RWMutexMap </code>，因为<code>sync.Map</code>的时间复杂度最低为O(n)，所以此时<code>sync.Map</code>的遍历性能就很差了。</li>
+</ol>
+
+			</div>
+			<hr class="post-end">
+			<footer class="post-info">
+				<p>
+					<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-tag meta-icon"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path><line x1="7" y1="7" x2="7" y2="7"></line></svg><span class="tag"><a href="http://echoblog.cc/tags/golang">Golang</a></span>
+				</p>
+				<p><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-file-text"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg></p>
+				<p><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-calendar"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>2021-01-04 08:00 &#43;0800</p>
+			</footer>
+		</article>
+		<div class="post-nav thin">
+			<a class="next-post" href="http://echoblog.cc/posts/golang-sync.mutex%E6%BA%90%E7%A0%81%E8%AE%B2%E8%A7%A3/">
+				<span class="post-nav-label"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-left"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>&nbsp;</span><br><span>「Golang」 sync.Mutex源码讲解</span>
+			</a>
+			<a class="prev-post" href="http://echoblog.cc/posts/golangslice%E6%BA%90%E7%A0%81%E8%AE%B2%E8%A7%A3/">
+				<span class="post-nav-label">&nbsp;<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-right"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg></span><br><span>「Golang」Slice源码讲解</span>
+			</a>
+		</div>
+		<div id="comments" class="thin" >
+			<style>
+				textarea{
+					color: #0a0a0a;
+				}
+			</style>
+<link rel="stylesheet" href="https://unpkg.com/gitalk/dist/gitalk.css">
+			<script src="https://unpkg.com/gitalk/dist/gitalk.min.js"></script>
+			<div id="gitalk-container"></div>
+			<script src="https://cdn.bootcss.com/js-sha1/0.6.0/sha1.js"></script>
+			<script>
+				const gitalk = new Gitalk({
+					clientID: '995328ca3d420ab499bc',
+					clientSecret: '7efc85b29c231f5ec361d9f5b44c3802cc17cb58',
+					repo: 'Echo.github.io',
+					owner: 'E-c-h-o-Go',
+					admin: ['E-c-h-o-Go'],
+					id: sha1(location.pathname),      
+					distractionFreeMode: false  
+				})
+
+				gitalk.render('gitalk-container')
+
+			</script>
+		</div>
+	</main>
+
+
+	<footer id="site-footer" class="section-inner thin animated fadeIn faster">
+		<p>&copy; 2021 <a href="http://echoblog.cc/">_Echo_</a> &#183; <a href="https://creativecommons.org/licenses/by-nc/4.0/" target="_blank" rel="noopener">CC BY-NC 4.0</a></p>
+		<p>
+			Made with <a href="https://gohugo.io/" target="_blank" rel="noopener">Hugo</a> &#183; Theme <a href="https://github.com/Track3/hermit" target="_blank" rel="noopener">Hermit</a> &#183; <a href="http://echoblog.cc/posts/index.xml" target="_blank" title="rss"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-rss"><path d="M4 11a9 9 0 0 1 9 9"></path><path d="M4 4a16 16 0 0 1 16 16"></path><circle cx="5" cy="19" r="1"></circle></svg></a>
+		</p>
+	</footer>
 
 
 
+	<script src="http://echoblog.cc/js/bundle.min.4a9a0ac3d2217822c7865b4161e6c2a71de1d70492264337755427898dd718f6.js" integrity="sha256-SpoKw9IheCLHhltBYebCpx3h1wSSJkM3dVQniY3XGPY=" crossorigin="anonymous"></script>
+	
+
+</body>
+
+</html>
