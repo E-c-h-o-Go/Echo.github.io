@@ -2,18 +2,18 @@
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
   <channel>
     <title>Golang on _Echo_</title>
-    <link>https://echo.github.io/tags/golang/</link>
+    <link>http://echoblog.cc/tags/golang/</link>
     <description>Recent content in Golang on _Echo_</description>
     <generator>Hugo -- gohugo.io</generator>
     <language>zh-cn</language>
     <copyright>This work is licensed under a Creative Commons Attribution-NonCommercial 4.0 International License.</copyright>
-    <lastBuildDate>Mon, 04 Jan 2021 00:00:00 +0000</lastBuildDate><atom:link href="https://echo.github.io/tags/golang/index.xml" rel="self" type="application/rss+xml" />
+    <lastBuildDate>Mon, 04 Jan 2021 00:00:00 +0000</lastBuildDate><atom:link href="http://echoblog.cc/tags/golang/index.xml" rel="self" type="application/rss+xml" />
     <item>
       <title>「Golang」 sync.Mutex源码讲解</title>
-      <link>https://echo.github.io/posts/golang-sync.mutex%E6%BA%90%E7%A0%81%E8%AE%B2%E8%A7%A3/</link>
+      <link>http://echoblog.cc/posts/golang-sync.mutex%E6%BA%90%E7%A0%81%E8%AE%B2%E8%A7%A3/</link>
       <pubDate>Mon, 04 Jan 2021 00:00:00 +0000</pubDate>
       
-      <guid>https://echo.github.io/posts/golang-sync.mutex%E6%BA%90%E7%A0%81%E8%AE%B2%E8%A7%A3/</guid>
+      <guid>http://echoblog.cc/posts/golang-sync.mutex%E6%BA%90%E7%A0%81%E8%AE%B2%E8%A7%A3/</guid>
       <description>sync.Mutex概述  后期更新：下面的代码中会多次出现 if race.Enabled { //todo } 这种代码，经过理解这种判断是进行判断当前程序是否开启了race竞态检测模式 ，即在运行go程序时是否采用 go run race xxx.go 这种进行进行竞态检测运行模式
  在进行源码解析之前，先看一下sync.Mutex是做什么的，首先看一下sync/mutex.go中的标注
  A Mutex is a mutual exclusion lock.The zero value for a Mutex is an unlocked mutex. A Mutex must not be copied after first use. 译注：Mutex是互斥锁，Mutex的零值是解锁的Mutex。Mutex在第一次使用后不得复制。
@@ -26,10 +26,10 @@ type Mutex struct { state int32 //当前锁的状态，该int32字段通过位�
     
     <item>
       <title>「Golang」 sync.Mutex源码讲解</title>
-      <link>https://echo.github.io/posts/golang%E5%B9%B6%E5%8F%91%E5%9C%BA%E6%99%AF%E4%B8%8B%E7%9A%84map%E4%BD%BF%E7%94%A8%E6%96%B9%E5%BC%8F%E5%8F%8A%E9%81%BF%E5%9D%91%E6%8C%87%E5%8D%97/</link>
+      <link>http://echoblog.cc/posts/golang%E5%B9%B6%E5%8F%91%E5%9C%BA%E6%99%AF%E4%B8%8B%E7%9A%84map%E4%BD%BF%E7%94%A8%E6%96%B9%E5%BC%8F%E5%8F%8A%E9%81%BF%E5%9D%91%E6%8C%87%E5%8D%97/</link>
       <pubDate>Mon, 04 Jan 2021 00:00:00 +0000</pubDate>
       
-      <guid>https://echo.github.io/posts/golang%E5%B9%B6%E5%8F%91%E5%9C%BA%E6%99%AF%E4%B8%8B%E7%9A%84map%E4%BD%BF%E7%94%A8%E6%96%B9%E5%BC%8F%E5%8F%8A%E9%81%BF%E5%9D%91%E6%8C%87%E5%8D%97/</guid>
+      <guid>http://echoblog.cc/posts/golang%E5%B9%B6%E5%8F%91%E5%9C%BA%E6%99%AF%E4%B8%8B%E7%9A%84map%E4%BD%BF%E7%94%A8%E6%96%B9%E5%BC%8F%E5%8F%8A%E9%81%BF%E5%9D%91%E6%8C%87%E5%8D%97/</guid>
       <description>非线程安全的map map是一个在开发过程中常用的内建类型，也是各位很熟悉的一个数据结构，他可以很方便的让我们做一些关于针对某些key-value结构的CRUD操作，但是在官方设计中，内建类型的map并不是一个可以在并发场景下进行并发读写的线程安全类型，此时我们就需要考虑对其进行一些线程安全的改造，首先我们要了解一下为什么```map``是一个非线程安全的类型，首先看下列代码：
 func main() { m := make(map[string]int, 2) m[&amp;#34;dd&amp;#34;] = 22 go func() { for { m[&amp;#34;ff&amp;#34;] = 1 } }() go func() { for { _ = m[&amp;#34;dd&amp;#34;] } }() time.Sleep(1 * time.Hour) } // out: // fatal error: concurrent map read and map write 上面的代码在运行期抛出了：fatal error: concurrent map read and map write异常，代表在读写过程中出现了同时读写的问题，那么为什么会出现这个问题呢？在map底层源代码的针对读和写的函数中有下列两段代码：
 // runtime.mapassign 即在map进行写入操作时调用的函数 func mapassign(t *maptype, h *hmap, key unsafe.Pointer) unsafe.Pointer { // ..............  // 在写入时会对h.</description>
@@ -37,10 +37,10 @@ func main() { m := make(map[string]int, 2) m[&amp;#34;dd&amp;#34;] = 22 go func(
     
     <item>
       <title>「Golang」Slice源码讲解</title>
-      <link>https://echo.github.io/posts/golangslice%E6%BA%90%E7%A0%81%E8%AE%B2%E8%A7%A3/</link>
+      <link>http://echoblog.cc/posts/golangslice%E6%BA%90%E7%A0%81%E8%AE%B2%E8%A7%A3/</link>
       <pubDate>Mon, 04 Jan 2021 00:00:00 +0000</pubDate>
       
-      <guid>https://echo.github.io/posts/golangslice%E6%BA%90%E7%A0%81%E8%AE%B2%E8%A7%A3/</guid>
+      <guid>http://echoblog.cc/posts/golangslice%E6%BA%90%E7%A0%81%E8%AE%B2%E8%A7%A3/</guid>
       <description>前言  ​ 在golang中有很多的数据结构是很常用的数据结构，比如array，slice，map等，其中最为常用的就是array和slice还有map了，理论上来讲array和slice在数据结构上是一种结构，都是顺序结构，但是由于array的固定长度特性，在有些时候对于需要动态的长度的使用情况很不友好，此时就需要利用slice进行对固定长度数组的代替
  什么是Slice  官方解释如下：
 ​	Slices wrap arrays to give a more general, powerful, and convenient interface to sequences of data. Except for items with explicit dimension such as transformation matrices, most array programming in Go is done with slices rather than simple arrays.
@@ -53,10 +53,10 @@ func main() { m := make(map[string]int, 2) m[&amp;#34;dd&amp;#34;] = 22 go func(
     
     <item>
       <title>「Golang」sync.Once用法以及源码讲解</title>
-      <link>https://echo.github.io/posts/golangsync.once%E7%94%A8%E6%B3%95%E4%BB%A5%E5%8F%8A%E6%BA%90%E7%A0%81%E8%AE%B2%E8%A7%A3/</link>
+      <link>http://echoblog.cc/posts/golangsync.once%E7%94%A8%E6%B3%95%E4%BB%A5%E5%8F%8A%E6%BA%90%E7%A0%81%E8%AE%B2%E8%A7%A3/</link>
       <pubDate>Mon, 04 Jan 2021 00:00:00 +0000</pubDate>
       
-      <guid>https://echo.github.io/posts/golangsync.once%E7%94%A8%E6%B3%95%E4%BB%A5%E5%8F%8A%E6%BA%90%E7%A0%81%E8%AE%B2%E8%A7%A3/</guid>
+      <guid>http://echoblog.cc/posts/golangsync.once%E7%94%A8%E6%B3%95%E4%BB%A5%E5%8F%8A%E6%BA%90%E7%A0%81%E8%AE%B2%E8%A7%A3/</guid>
       <description>前言  在我们开发过程中经常会使用到单例模式这一经典的设计模式，单例模式可以帮助开发者针对某个（些）变量或者对象或者函数（方法）进行在程序运行期间只有一次的初始化或者函数调用操作，比如在开发项目中针对某一类连接池的初始化（如数据库连接池等）。针对这种情况，我们就需要使用单例模式进行操作。
  单例模式🌰 自己搞得单例模式 要实现一个单例模式，我们会很快就想到了在一个结构体中放置一个flag字段用于标记当前的函数是否被执行过，举个🌰：
 type SingletonPattern struct { done bool } func (receiver *SingletonPattern) Do(f func()) { if !receiver.done { f() receiver.done=true } } 看似很美好，但是此时，如果传入的需要调用的函数f()会执行很长时间，比如数据库查询或者做一些连接什么的，当别的goroutine运行到此处的时候由于还没有执行完f()，就会发现done标记仍然是false，那么仍然会调用一次f()，此时就违背了单例模式的初衷。
@@ -69,10 +69,10 @@ func (o *Once) Do(f func()) { // 原子获取当前 done 字段是否等于0 	//
     
     <item>
       <title>「Golang」sync.Pool的源码解</title>
-      <link>https://echo.github.io/posts/golangsync.pool%E7%9A%84%E6%BA%90%E7%A0%81%E8%A7%A3%E6%9E%90/</link>
+      <link>http://echoblog.cc/posts/golangsync.pool%E7%9A%84%E6%BA%90%E7%A0%81%E8%A7%A3%E6%9E%90/</link>
       <pubDate>Mon, 04 Jan 2021 00:00:00 +0000</pubDate>
       
-      <guid>https://echo.github.io/posts/golangsync.pool%E7%9A%84%E6%BA%90%E7%A0%81%E8%A7%A3%E6%9E%90/</guid>
+      <guid>http://echoblog.cc/posts/golangsync.pool%E7%9A%84%E6%BA%90%E7%A0%81%E8%A7%A3%E6%9E%90/</guid>
       <description>前言 在平时我们的业务逻辑中，会出现多次，重复的申请在堆上创建的对象用作他用，当并发量不大的时候，可能往往并不会产生一些什么问题，当时一旦当并发量增长的时候就会发现因为重复在堆上创建对象导致了GC的扫描时间与STW（stop-the-world）很长，导致程序性能的降低，因为大量地创建在堆上的对象，也会影响垃圾回收标记的时间，因此来说频繁的在堆上申请对象说对高并发量的程序性能会产生很大的影响。
 此时我们可以采用对象池的方式，去针对某些频繁的且大量重复申请的对象预先的创建或者将用完的对象放回对象池中，以便下回使用的时候免去了重新申请内存的问题，这样就有利于减少业务的耗时，还能提高程序的整体性能。 对象池是一种设计模式也是一种性能优化的方式，对象池（对象池模式）的概念如下：
  对象池（英语：object pool pattern）是一种设计模式。一个对象池包含一组已经初始化过且可以使用的对象，而可以在有需求时创建和销毁对象。池的用户可以从池子中取得对象，对其进行操作处理，并在不需要时归还给池子而非直接销毁它。这是一种特殊的工厂对象。 若初始化、实例化的代价高，且有需求需要经常实例化，但每次实例化的数量较少的情况下，使用对象池可以获得显著的效能提升。从池子中取得对象的时间是可预测的，但新建一个实例所需的时间是不确定。
@@ -83,10 +83,10 @@ sync.Pool 首先针对sync.Pool官方给了一个合理的简述：
     
     <item>
       <title>「Golang」sync.RWMutex源码讲解</title>
-      <link>https://echo.github.io/posts/golangsync.rwmutex%E6%BA%90%E7%A0%81%E8%AE%B2%E8%A7%A3/</link>
+      <link>http://echoblog.cc/posts/golangsync.rwmutex%E6%BA%90%E7%A0%81%E8%AE%B2%E8%A7%A3/</link>
       <pubDate>Mon, 04 Jan 2021 00:00:00 +0000</pubDate>
       
-      <guid>https://echo.github.io/posts/golangsync.rwmutex%E6%BA%90%E7%A0%81%E8%AE%B2%E8%A7%A3/</guid>
+      <guid>http://echoblog.cc/posts/golangsync.rwmutex%E6%BA%90%E7%A0%81%E8%AE%B2%E8%A7%A3/</guid>
       <description>什么是sync.RWMutex 上次写过了sync.Mutex的源代码解析，这回写一下他的扩展版本，sync.RWMutex（下称读写锁）的源代码解析，首先看一下读写锁的作用，如下述：
  sync/rwmutex.go中 // A RWMutex is a reader/writer mutual exclusion lock. // The lock can be held by an arbitrary number of readers or a single writer.
  白话来讲，读写锁就是一个可以并发读但是不可以并发写的锁（此处有疑：不知应该称互斥锁还是称为锁），由于互斥锁的特性，会导致将所有goroutine（下称协程）串行化，从而影响整体程序运行的性能，如果写的数量大于读的数量时，性能损耗暂且可以忽略不计（建议不要忽略），但是当读的数量大于写的数量时，互斥锁对性能的影响是很大的，所以此刻我们需要采用读写锁来进行读操作和写操作的分开。
@@ -99,10 +99,10 @@ sync.Pool 首先针对sync.Pool官方给了一个合理的简述：
     
     <item>
       <title>「Golang」sync.WaitGroup源码讲解.md</title>
-      <link>https://echo.github.io/posts/golangsync.waitgroup%E6%BA%90%E7%A0%81%E8%AE%B2%E8%A7%A3/</link>
+      <link>http://echoblog.cc/posts/golangsync.waitgroup%E6%BA%90%E7%A0%81%E8%AE%B2%E8%A7%A3/</link>
       <pubDate>Mon, 04 Jan 2021 00:00:00 +0000</pubDate>
       
-      <guid>https://echo.github.io/posts/golangsync.waitgroup%E6%BA%90%E7%A0%81%E8%AE%B2%E8%A7%A3/</guid>
+      <guid>http://echoblog.cc/posts/golangsync.waitgroup%E6%BA%90%E7%A0%81%E8%AE%B2%E8%A7%A3/</guid>
       <description>sync.WaitGroup介绍 当我们在开发过程中，经常需要在开启多个goroutine后，等待全部的goroutine执行完毕后才进行下一步的业务逻辑执行。此时我们可能会采用轮询的方式去定时侦测已经开启的多个goroutine的业务是否执行完毕，但是这样性能很低，并且持续占用cpu时间片很消耗cpu的资源，此时我们就该使用sync.WaitGroup来完成此次操作。举个🌰，下列代码是开了10个goroutine后等待其各睡眠5秒之后进行后续操作的sync.WaitGroup方法实现。
 func main() { // 创建对象 	var wait sync.WaitGroup for i := 0; i &amp;lt; 10; i++ { // 为需要等待结束的goroutine数量+1 	wait.Add(1) go func() { time.Sleep(5*time.Second) // 结束 使得需要等待的数量-1 	// 等同于 wait.Add(-1) 	wait.Done() }() } // 等待所有执行完毕 	wait.Wait() fmt.Println(&amp;#34;wait done&amp;#34;) } 上述代码的睡眠5秒可以替换为任何需要在goroutine中执行的业务逻辑，上述代码中出现了下述几个sync.WaitGroup中提供的方法，提供方法很少很简洁，接下来就开始解析一下sync.WaitGroup的相关信息。
 func (wg *WaitGroup) Add(delta int) func (wg *WaitGroup) Done() func (wg *WaitGroup) Wait() sync.WaitGroup源代码解析 1：sync.WaitGroup结构体的解析 type WaitGroup struct { // 一个防止sync.WaitGroup被复制的标记结构体 	noCopy noCopy // 该数组在32为系统与64位系统中代表的用途不同 	// 首先说64位系统： 	// state1[0]代表当前sync.</description>
@@ -110,10 +110,10 @@ func (wg *WaitGroup) Add(delta int) func (wg *WaitGroup) Done() func (wg *WaitGr
     
     <item>
       <title>「Golang」不谈底层源码只谈使用，万字长文话说Golang的数组与切片</title>
-      <link>https://echo.github.io/posts/golang%E4%B8%8D%E8%B0%88%E5%BA%95%E5%B1%82%E6%BA%90%E7%A0%81%E5%8F%AA%E8%B0%88%E4%BD%BF%E7%94%A8%E4%B8%87%E5%AD%97%E9%95%BF%E6%96%87%E8%AF%9D%E8%AF%B4golang%E7%9A%84%E6%95%B0%E7%BB%84%E4%B8%8E%E5%88%87%E7%89%87/</link>
+      <link>http://echoblog.cc/posts/golang%E4%B8%8D%E8%B0%88%E5%BA%95%E5%B1%82%E6%BA%90%E7%A0%81%E5%8F%AA%E8%B0%88%E4%BD%BF%E7%94%A8%E4%B8%87%E5%AD%97%E9%95%BF%E6%96%87%E8%AF%9D%E8%AF%B4golang%E7%9A%84%E6%95%B0%E7%BB%84%E4%B8%8E%E5%88%87%E7%89%87/</link>
       <pubDate>Mon, 04 Jan 2021 00:00:00 +0000</pubDate>
       
-      <guid>https://echo.github.io/posts/golang%E4%B8%8D%E8%B0%88%E5%BA%95%E5%B1%82%E6%BA%90%E7%A0%81%E5%8F%AA%E8%B0%88%E4%BD%BF%E7%94%A8%E4%B8%87%E5%AD%97%E9%95%BF%E6%96%87%E8%AF%9D%E8%AF%B4golang%E7%9A%84%E6%95%B0%E7%BB%84%E4%B8%8E%E5%88%87%E7%89%87/</guid>
+      <guid>http://echoblog.cc/posts/golang%E4%B8%8D%E8%B0%88%E5%BA%95%E5%B1%82%E6%BA%90%E7%A0%81%E5%8F%AA%E8%B0%88%E4%BD%BF%E7%94%A8%E4%B8%87%E5%AD%97%E9%95%BF%E6%96%87%E8%AF%9D%E8%AF%B4golang%E7%9A%84%E6%95%B0%E7%BB%84%E4%B8%8E%E5%88%87%E7%89%87/</guid>
       <description>作者注：本篇所有代码采用go1.15+版本编写。
  一、前言 之前一直在写一些同步原语和其他一些东西的的源代码分析，感觉写起来很麻烦，今天开始我决定写几期关于go中常用数据结构的解析、用法以及相关的可能会踩到的坑，正好也当作自己的知识体系巩固，今天开始第一个数据结构的解析&amp;mdash;数组与切片。
 二、数组 1、什么是数组  数组（Array）是有序的元素序列。 若将有限个类型相同的变量的集合命名，那么这个名称为数组名。组成数组的各个变量称为数组的分量，也称为数组的元素，有时也称为下标变量。用于区分数组的各个元素的数字编号称为下标。数组是在程序设计中，为了处理方便， 把具有相同类型的若干元素按有序的形式组织起来的一种形式。 这些有序排列的同类数据元素的集合称为数组。摘自百度百科【数组】
@@ -127,10 +127,10 @@ func main() { var a [4]int a[0] = 5 a[1] = 2 a[2] = 5 a[3] = 7 // len 获取数�
     
     <item>
       <title>「Golang」关于通过proto消息名，创建proto.Message对象</title>
-      <link>https://echo.github.io/posts/golang%E5%85%B3%E4%BA%8E%E9%80%9A%E8%BF%87proto%E6%B6%88%E6%81%AF%E5%90%8D%E5%88%9B%E5%BB%BAproto.message%E5%AF%B9%E8%B1%A1/</link>
+      <link>http://echoblog.cc/posts/golang%E5%85%B3%E4%BA%8E%E9%80%9A%E8%BF%87proto%E6%B6%88%E6%81%AF%E5%90%8D%E5%88%9B%E5%BB%BAproto.message%E5%AF%B9%E8%B1%A1/</link>
       <pubDate>Mon, 04 Jan 2021 00:00:00 +0000</pubDate>
       
-      <guid>https://echo.github.io/posts/golang%E5%85%B3%E4%BA%8E%E9%80%9A%E8%BF%87proto%E6%B6%88%E6%81%AF%E5%90%8D%E5%88%9B%E5%BB%BAproto.message%E5%AF%B9%E8%B1%A1/</guid>
+      <guid>http://echoblog.cc/posts/golang%E5%85%B3%E4%BA%8E%E9%80%9A%E8%BF%87proto%E6%B6%88%E6%81%AF%E5%90%8D%E5%88%9B%E5%BB%BAproto.message%E5%AF%B9%E8%B1%A1/</guid>
       <description>前几天在做一些proto相关业务逻辑编写，在编写过程中，需要通过proto的message full name 去动态的创建一个proto.Message对象，在网上找一些相关的内容也没找到，所以就自己研究了一下并且实现了这个功能。
 下面是proto v1版本实现代码。
 //该实现仅用于proto v1版本实现 即	github.com/golang/protobuf 库 func parseRequest(msgName protoreflect.FullName, data []byte) (proto.Message,error) { // 获取full name对应的message ，如果不存在则返回error 	msgType, err := protoregistry.GlobalTypes.FindMessageByName(msgName) if err != nil { return nil, err } //上面返回的是一个message 反射类型，需要把它new出一个 protoreflect.Message类型然后转换成protoiface.MessageV1 	//此时 根据源代码显示 proto.Message实现为 type Message = protoiface.MessageV1 	//即type Message 为 protoiface.MessageV1 的别名 	msg := proto.MessageV1(msgType.New()) err = proto.Unmarshal(data, msg) if err != nil { return nil, err } return msg, nil } proto v2版本实现如下</description>
@@ -138,10 +138,10 @@ func main() { var a [4]int a[0] = 5 a[1] = 2 a[2] = 5 a[3] = 7 // len 获取数�
     
     <item>
       <title>「Golang」关于通道的一些总结</title>
-      <link>https://echo.github.io/posts/golang%E5%85%B3%E4%BA%8E%E9%80%9A%E9%81%93%E7%9A%84%E4%B8%80%E4%BA%9B%E6%80%BB%E7%BB%93/</link>
+      <link>http://echoblog.cc/posts/golang%E5%85%B3%E4%BA%8E%E9%80%9A%E9%81%93%E7%9A%84%E4%B8%80%E4%BA%9B%E6%80%BB%E7%BB%93/</link>
       <pubDate>Mon, 04 Jan 2021 00:00:00 +0000</pubDate>
       
-      <guid>https://echo.github.io/posts/golang%E5%85%B3%E4%BA%8E%E9%80%9A%E9%81%93%E7%9A%84%E4%B8%80%E4%BA%9B%E6%80%BB%E7%BB%93/</guid>
+      <guid>http://echoblog.cc/posts/golang%E5%85%B3%E4%BA%8E%E9%80%9A%E9%81%93%E7%9A%84%E4%B8%80%E4%BA%9B%E6%80%BB%E7%BB%93/</guid>
       <description> 通道分为有缓冲与无缓冲，创建方式分别为make(chan type)或make(chan type ,0) 与make(chan type ,len)。 无缓冲通道在没有接收端或没有发送端的时候将会阻塞。 无缓冲通道可以完成两个go程的同步消息处理操作，并且无缓冲通道的接收数据会发生在唤醒放者之前。 如下图（画的不好见谅）：  如果有缓冲通道在发送时发现队列已满，则发送方将等待直至接收方取出数据，如果队列为空则接收方同样等待发送方放入数据。 for range 可以在一个未关闭的同道中循环接收数据，与 for { i, ok := &amp;lt;-ch if !ok { break } fmt.Println(i) } 等同，但当通道关闭时则会跳出循环。 select{} 将会永久阻塞，即无任何case的select 会永久阻塞 select的多个case满足则会随机选择，此特点是为了防止饥饿问题。 通道为nil时发送与接收均会阻塞，在select也会永不执行  </description>
     </item>
     

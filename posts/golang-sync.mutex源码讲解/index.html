@@ -33,7 +33,7 @@ type Mutex struct { state int32 //当前锁的状态，该int32字段通过位�
 sync.Mutex解析 接下来看一下sync.Mutex结构体的字段内容：
 type Mutex struct { state int32 //当前锁的状态，该int32字段通过位移操作使之可以包含不同意义 	sema uint32 //是一个信号变量用于负责go程的唤醒和阻塞休眠 } const ( mutexLocked = 1 &lt;&lt; iota // 锁是否被持有 即是否已经锁住 	mutexWoken // 是否有被唤醒的go程 	mutexStarving //是否处于饥饿状态，此标记可以确保某些go程不会长久获取不到锁 	mutexWaiterShift = iota // 目前等待锁的go程数量 	starvationThresholdNs = 1e6 //进入饥饿状态的阈值时间 1ms ) Lock() 关于饥饿状态这个问题等之后在进行讲解，首先先说一下对Mutex加锁的过程" />
 <meta property="og:type" content="article" />
-<meta property="og:url" content="https://echo.github.io/posts/golang-sync.mutex%E6%BA%90%E7%A0%81%E8%AE%B2%E8%A7%A3/" />
+<meta property="og:url" content="http://echoblog.cc/posts/golang-sync.mutex%E6%BA%90%E7%A0%81%E8%AE%B2%E8%A7%A3/" />
 <meta property="article:published_time" content="2021-01-04T00:00:00+00:00" />
 <meta property="article:modified_time" content="2021-01-04T00:00:00+00:00" />
 <meta name="twitter:card" content="summary"/>
@@ -55,7 +55,7 @@ type Mutex struct { state int32 //当前锁的状态，该int32字段通过位�
 	<link rel="shortcut icon" href="/favicon.ico">
 
 	<title>「Golang」 sync.Mutex源码讲解</title>
-	<link rel="stylesheet" href="https://echo.github.io/css/style.min.eac77496566fd7d5768fd650ddb0b2b181ca6a2d7c5fdd6fe6b8ba4bf47e566f.css" integrity="sha256-6sd0llZv19V2j9ZQ3bCysYHKai18X91v5ri6S/R+Vm8=" crossorigin="anonymous">
+	<link rel="stylesheet" href="http://echoblog.cc/css/style.min.eac77496566fd7d5768fd650ddb0b2b181ca6a2d7c5fdd6fe6b8ba4bf47e566f.css" integrity="sha256-6sd0llZv19V2j9ZQ3bCysYHKai18X91v5ri6S/R+Vm8=" crossorigin="anonymous">
 	
 </head>
 
@@ -65,12 +65,12 @@ type Mutex struct { state int32 //当前锁的状态，该int32字段通过位�
 		<div class="hdr-wrapper section-inner">
 			<div class="hdr-left">
 				<div class="site-branding">
-					<a href="https://echo.github.io/">_Echo_</a>
+					<a href="http://echoblog.cc/">_Echo_</a>
 				</div>
 				<nav class="site-nav hide-in-mobile">
 					
-				<a href="https://echo.github.io/posts/">Posts</a>
-				<a href="https://echo.github.io/about/">About</a>
+				<a href="http://echoblog.cc/posts/">Posts</a>
+				<a href="http://echoblog.cc/about/">About</a>
 
 				</nav>
 			</div>
@@ -81,8 +81,8 @@ type Mutex struct { state int32 //当前锁的状态，该int32字段通过位�
 	</header>
 	<div id="mobile-menu" class="animated fast">
 		<ul>
-			<li><a href="https://echo.github.io/posts/">Posts</a></li>
-			<li><a href="https://echo.github.io/about/">About</a></li>
+			<li><a href="http://echoblog.cc/posts/">Posts</a></li>
+			<li><a href="http://echoblog.cc/about/">About</a></li>
 		</ul>
 	</div>
 
@@ -319,14 +319,14 @@ go run race xxx.go
 			<hr class="post-end">
 			<footer class="post-info">
 				<p>
-					<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-tag meta-icon"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path><line x1="7" y1="7" x2="7" y2="7"></line></svg><span class="tag"><a href="https://echo.github.io/tags/golang">Golang</a></span>
+					<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-tag meta-icon"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path><line x1="7" y1="7" x2="7" y2="7"></line></svg><span class="tag"><a href="http://echoblog.cc/tags/golang">Golang</a></span>
 				</p>
 				<p><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-file-text"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg></p>
 				<p><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-calendar"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>2021-01-04 08:00 &#43;0800</p>
 			</footer>
 		</article>
 		<div class="post-nav thin">
-			<a class="prev-post" href="https://echo.github.io/posts/golang%E5%B9%B6%E5%8F%91%E5%9C%BA%E6%99%AF%E4%B8%8B%E7%9A%84map%E4%BD%BF%E7%94%A8%E6%96%B9%E5%BC%8F%E5%8F%8A%E9%81%BF%E5%9D%91%E6%8C%87%E5%8D%97/">
+			<a class="prev-post" href="http://echoblog.cc/posts/golang%E5%B9%B6%E5%8F%91%E5%9C%BA%E6%99%AF%E4%B8%8B%E7%9A%84map%E4%BD%BF%E7%94%A8%E6%96%B9%E5%BC%8F%E5%8F%8A%E9%81%BF%E5%9D%91%E6%8C%87%E5%8D%97/">
 				<span class="post-nav-label">&nbsp;<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-right"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg></span><br><span>「Golang」 sync.Mutex源码讲解</span>
 			</a>
 		</div>
@@ -335,15 +335,15 @@ go run race xxx.go
 	</main>
 
 	<footer id="site-footer" class="section-inner thin animated fadeIn faster">
-		<p>&copy; 2021 <a href="https://echo.github.io/">_Echo_</a> &#183; <a href="https://creativecommons.org/licenses/by-nc/4.0/" target="_blank" rel="noopener">CC BY-NC 4.0</a></p>
+		<p>&copy; 2021 <a href="http://echoblog.cc/">_Echo_</a> &#183; <a href="https://creativecommons.org/licenses/by-nc/4.0/" target="_blank" rel="noopener">CC BY-NC 4.0</a></p>
 		<p>
-			Made with <a href="https://gohugo.io/" target="_blank" rel="noopener">Hugo</a> &#183; Theme <a href="https://github.com/Track3/hermit" target="_blank" rel="noopener">Hermit</a> &#183; <a href="https://echo.github.io/posts/index.xml" target="_blank" title="rss"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-rss"><path d="M4 11a9 9 0 0 1 9 9"></path><path d="M4 4a16 16 0 0 1 16 16"></path><circle cx="5" cy="19" r="1"></circle></svg></a>
+			Made with <a href="https://gohugo.io/" target="_blank" rel="noopener">Hugo</a> &#183; Theme <a href="https://github.com/Track3/hermit" target="_blank" rel="noopener">Hermit</a> &#183; <a href="http://echoblog.cc/posts/index.xml" target="_blank" title="rss"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-rss"><path d="M4 11a9 9 0 0 1 9 9"></path><path d="M4 4a16 16 0 0 1 16 16"></path><circle cx="5" cy="19" r="1"></circle></svg></a>
 		</p>
 	</footer>
 
 
 
-	<script src="https://echo.github.io/js/bundle.min.4a9a0ac3d2217822c7865b4161e6c2a71de1d70492264337755427898dd718f6.js" integrity="sha256-SpoKw9IheCLHhltBYebCpx3h1wSSJkM3dVQniY3XGPY=" crossorigin="anonymous"></script>
+	<script src="http://echoblog.cc/js/bundle.min.4a9a0ac3d2217822c7865b4161e6c2a71de1d70492264337755427898dd718f6.js" integrity="sha256-SpoKw9IheCLHhltBYebCpx3h1wSSJkM3dVQniY3XGPY=" crossorigin="anonymous"></script>
 	
 
 </body>

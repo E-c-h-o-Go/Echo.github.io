@@ -2,18 +2,18 @@
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
   <channel>
     <title>转载 on _Echo_</title>
-    <link>https://echo.github.io/tags/%E8%BD%AC%E8%BD%BD/</link>
+    <link>http://echoblog.cc/tags/%E8%BD%AC%E8%BD%BD/</link>
     <description>Recent content in 转载 on _Echo_</description>
     <generator>Hugo -- gohugo.io</generator>
     <language>zh-cn</language>
     <copyright>This work is licensed under a Creative Commons Attribution-NonCommercial 4.0 International License.</copyright>
-    <lastBuildDate>Mon, 04 Jan 2021 00:00:00 +0000</lastBuildDate><atom:link href="https://echo.github.io/tags/%E8%BD%AC%E8%BD%BD/index.xml" rel="self" type="application/rss+xml" />
+    <lastBuildDate>Mon, 04 Jan 2021 00:00:00 +0000</lastBuildDate><atom:link href="http://echoblog.cc/tags/%E8%BD%AC%E8%BD%BD/index.xml" rel="self" type="application/rss+xml" />
     <item>
       <title>「Reprint」关于Golang内联优化的一些策略和限制</title>
-      <link>https://echo.github.io/posts/reprint%E5%85%B3%E4%BA%8Egolang%E5%86%85%E8%81%94%E4%BC%98%E5%8C%96%E7%9A%84%E4%B8%80%E4%BA%9B%E7%AD%96%E7%95%A5%E5%92%8C%E9%99%90%E5%88%B6/</link>
+      <link>http://echoblog.cc/posts/reprint%E5%85%B3%E4%BA%8Egolang%E5%86%85%E8%81%94%E4%BC%98%E5%8C%96%E7%9A%84%E4%B8%80%E4%BA%9B%E7%AD%96%E7%95%A5%E5%92%8C%E9%99%90%E5%88%B6/</link>
       <pubDate>Mon, 04 Jan 2021 00:00:00 +0000</pubDate>
       
-      <guid>https://echo.github.io/posts/reprint%E5%85%B3%E4%BA%8Egolang%E5%86%85%E8%81%94%E4%BC%98%E5%8C%96%E7%9A%84%E4%B8%80%E4%BA%9B%E7%AD%96%E7%95%A5%E5%92%8C%E9%99%90%E5%88%B6/</guid>
+      <guid>http://echoblog.cc/posts/reprint%E5%85%B3%E4%BA%8Egolang%E5%86%85%E8%81%94%E4%BC%98%E5%8C%96%E7%9A%84%E4%B8%80%E4%BA%9B%E7%AD%96%E7%95%A5%E5%92%8C%E9%99%90%E5%88%B6/</guid>
       <description>[译] Go语言inline内联的策略与限制</description>
     </item>
     
