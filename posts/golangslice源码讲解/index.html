@@ -313,25 +313,25 @@ $$
 			</a>
 		</div>
 		<div id="comments" class="thin">
-</div>
-		<link rel="stylesheet" href="https://unpkg.com/gitalk/dist/gitalk.css">
-		<script src="https://unpkg.com/gitalk/dist/gitalk.min.js"></script>
-		<div id="gitalk-container"></div>
-		<script src="https://cdn.bootcss.com/js-sha1/0.6.0/sha1.js"></script>
-		<script>
-			const gitalk = new Gitalk({
-				clientID: '995328ca3d420ab499bc',
-				clientSecret: '7efc85b29c231f5ec361d9f5b44c3802cc17cb58',
-				repo: 'Echo.github.io',
-				owner: 'E-c-h-o-Go',
-				admin: ['E-c-h-o-Go'],
-				id: sha1(location.pathname),      
-				distractionFreeMode: false  
-			})
+<link rel="stylesheet" href="https://unpkg.com/gitalk/dist/gitalk.css">
+			<script src="https://unpkg.com/gitalk/dist/gitalk.min.js"></script>
+			<div id="gitalk-container"></div>
+			<script src="https://cdn.bootcss.com/js-sha1/0.6.0/sha1.js"></script>
+			<script>
+				const gitalk = new Gitalk({
+					clientID: '995328ca3d420ab499bc',
+					clientSecret: '7efc85b29c231f5ec361d9f5b44c3802cc17cb58',
+					repo: 'Echo.github.io',
+					owner: 'E-c-h-o-Go',
+					admin: ['E-c-h-o-Go'],
+					id: sha1(location.pathname),      
+					distractionFreeMode: false  
+				})
 
-			gitalk.render('gitalk-container')
+				gitalk.render('gitalk-container')
 
-		</script>
+			</script>
+		</div>
 	</main>
 
 
