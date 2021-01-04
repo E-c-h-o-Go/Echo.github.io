@@ -351,6 +351,7 @@ func (wg *WaitGroup) Add(delta int) func (wg *WaitGroup) Done() func (wg *WaitGr
 <link rel="stylesheet" href="https://unpkg.com/gitalk/dist/gitalk.css">
 <script src="https://unpkg.com/gitalk/dist/gitalk.min.js"></script>
 <div id="gitalk-container"></div>
+<script src="https://cdn.bootcss.com/js-sha1/0.6.0/sha1.js"></script>
 <script>
 	const gitalk = new Gitalk({
 		clientID: '995328ca3d420ab499bc',
@@ -358,7 +359,7 @@ func (wg *WaitGroup) Add(delta int) func (wg *WaitGroup) Done() func (wg *WaitGr
 		repo: 'Echo.github.io',
 		owner: 'E-c-h-o-Go',
 		admin: ['E-c-h-o-Go'],
-		id: location.pathname,      
+		id: sha1(location.pathname),      
 		distractionFreeMode: false  
 	})
 
