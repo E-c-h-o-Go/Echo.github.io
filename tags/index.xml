@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>Tags on _Echo_</title>
+    <link>https://echo.github.io/tags/</link>
+    <description>Recent content in Tags on _Echo_</description>
+    <generator>Hugo -- gohugo.io</generator>
+    <language>zh-cn</language>
+    <copyright>This work is licensed under a Creative Commons Attribution-NonCommercial 4.0 International License.</copyright>
+    <lastBuildDate>Mon, 04 Jan 2021 00:00:00 +0000</lastBuildDate><atom:link href="https://echo.github.io/tags/index.xml" rel="self" type="application/rss+xml" />
+    <item>
+      <title>Golang</title>
+      <link>https://echo.github.io/tags/golang/</link>
+      <pubDate>Mon, 04 Jan 2021 00:00:00 +0000</pubDate>
+      
+      <guid>https://echo.github.io/tags/golang/</guid>
+      <description></description>
+    </item>
+    
+    <item>
+      <title>不负责任解析</title>
+      <link>https://echo.github.io/tags/%E4%B8%8D%E8%B4%9F%E8%B4%A3%E4%BB%BB%E8%A7%A3%E6%9E%90/</link>
+      <pubDate>Mon, 04 Jan 2021 00:00:00 +0000</pubDate>
+      
+      <guid>https://echo.github.io/tags/%E4%B8%8D%E8%B4%9F%E8%B4%A3%E4%BB%BB%E8%A7%A3%E6%9E%90/</guid>
+      <description></description>
+    </item>
+    
+    <item>
+      <title>转载</title>
+      <link>https://echo.github.io/tags/%E8%BD%AC%E8%BD%BD/</link>
+      <pubDate>Mon, 04 Jan 2021 00:00:00 +0000</pubDate>
+      
+      <guid>https://echo.github.io/tags/%E8%BD%AC%E8%BD%BD/</guid>
+      <description></description>
+    </item>
+    
+  </channel>
+</rss>
