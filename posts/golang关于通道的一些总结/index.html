@@ -108,6 +108,22 @@
 </div>
 	</main>
 
+<div id="git-comments"></div>
+<link rel="stylesheet" href="https://imsun.github.io/gitment/style/default.css">
+<script src="https://imsun.github.io/gitment/dist/gitment.browser.js"></script>
+<script>
+	var gitment = new Gitment({
+		owner: 'E-c-h-o-Go',
+		repo: 'https://github.com/E-c-h-o-Go/Echo.github.io',
+		oauth: {
+			client_id: '995328ca3d420ab499bc',
+			client_secret: '84278cb965bbe422bf0eba7c6b7f05bb44a3b1df',
+		}
+	})
+	gitment.render('git-comments')
+</script>
+
+
 	<footer id="site-footer" class="section-inner thin animated fadeIn faster">
 		<p>&copy; 2021 <a href="http://echoblog.cc/">_Echo_</a> &#183; <a href="https://creativecommons.org/licenses/by-nc/4.0/" target="_blank" rel="noopener">CC BY-NC 4.0</a></p>
 		<p>
