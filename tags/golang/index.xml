@@ -7,7 +7,23 @@
     <generator>Hugo -- gohugo.io</generator>
     <language>zh-cn</language>
     <copyright>This work is licensed under a Creative Commons Attribution-NonCommercial 4.0 International License.</copyright>
-    <lastBuildDate>Mon, 04 Jan 2021 00:00:00 +0000</lastBuildDate><atom:link href="http://echoblog.cc/tags/golang/index.xml" rel="self" type="application/rss+xml" />
+    <lastBuildDate>Wed, 20 Jan 2021 00:00:00 +0000</lastBuildDate><atom:link href="http://echoblog.cc/tags/golang/index.xml" rel="self" type="application/rss+xml" />
+    <item>
+      <title>「Golang」 通道源码解析</title>
+      <link>http://echoblog.cc/posts/golangchannel%E8%A7%A3%E6%9E%90/</link>
+      <pubDate>Wed, 20 Jan 2021 00:00:00 +0000</pubDate>
+      
+      <guid>http://echoblog.cc/posts/golangchannel%E8%A7%A3%E6%9E%90/</guid>
+      <description>[TOC]
+通道描述 通道（Channel/Chan）是在golang并发编程中用的最多的一个数据结构（也可以说是基础类型），在go中，作者在并发编程的环境下对于数据之间的共享提出了一个建议，也是go的经典开发准则：
+ Do not communicate by sharing memory; instead, share memory by communicating. 不要通过共享内存来通信，而应该通过通信来共享内存
+ 在通信方面，通道给我们提供了一个很好的在并发编程环境中进行多Goroutine之间的数据共享。那么本篇文章就来解析一下通道在go中的源代码是如何实现的。
+通道相关结构体解析 本篇文章所有的源代码数据均采用go1.15.5版本，如果和您的源代码不相同，建议更换1.15.5版本。
+接下来我将根据通道的结构与其相关常量来进行解析，通道的源代码文件在 runtime/chan.go 路径下。
+ (前方高能，代码巨长，请各位准备好瓜子饮料矿泉水耐心观看)
+ type hchan struct { qcount uint // 队列中有多少数据，即len时获得的值 	dataqsiz uint // chan 是一个循环队列，这个字段代表这个循环队列的总大小，即cap时获取的值 	buf unsafe.Pointer // 指向数组的指针，这个循环队列时靠数组实现的 	elemsize uint16 // 每个元素的size，做为偏移使用 	closed uint32 // 这个chan 是否关闭的标记 	elemtype *_type // 构建chan时候的元素类型  // 这个索引是用于做地址偏移的而不是像数组一样的下标 	sendx uint // 发送索引 即当前发送到哪了 	recvx uint // 接收索引 	recvq waitq // 被阻塞的接收g的列表 	sendq waitq // 被阻塞的发送g的列表  // 一个锁 防止修改结构体中内容以及 waitq中的内容 	lock mutex } type waitq struct { first *sudog // 队列头 sudog是一个存有等待g相关信息的结构体 	last *sudog // 队列尾 sudog是一个存有等待g相关信息的结构体 } 构建通道操作 func makechan64(t *chantype, size int64) *hchan { // 应该是判断当前系统是不是64位系统，因为int的长度会随着系统长度改变而改变 	// 32位系统中 int 相当于int32 64位中 int相当于int64 	if int64(int(size)) !</description>
+    </item>
+    
     <item>
       <title>「Golang」 sync.Mutex源码讲解</title>
       <link>http://echoblog.cc/posts/golang-sync.mutex%E6%BA%90%E7%A0%81%E8%AE%B2%E8%A7%A3/</link>
@@ -134,15 +150,6 @@ func main() { var a [4]int a[0] = 5 a[1] = 2 a[2] = 5 a[3] = 7 // len 获取数�
       <description>前几天在做一些proto相关业务逻辑编写，在编写过程中，需要通过proto的message full name 去动态的创建一个proto.Message对象，在网上找一些相关的内容也没找到，所以就自己研究了一下并且实现了这个功能。
 下面是proto v1版本实现代码。
 //该实现仅用于proto v1版本实现 即	github.com/golang/protobuf 库 func parseRequest(msgName protoreflect.FullName, data []byte) (proto.Message,error) { // 获取full name对应的message ，如果不存在则返回error 	msgType, err := protoregistry.GlobalTypes.FindMessageByName(msgName) if err != nil { return nil, err } //上面返回的是一个message 反射类型，需要把它new出一个 protoreflect.Message类型然后转换成protoiface.MessageV1 	//此时 根据源代码显示 proto.Message实现为 type Message = protoiface.MessageV1 	//即type Message 为 protoiface.MessageV1 的别名 	msg := proto.MessageV1(msgType.New()) err = proto.Unmarshal(data, msg) if err != nil { return nil, err } return msg, nil } proto v2版本实现如下</description>
-    </item>
-    
-    <item>
-      <title>「Golang」关于通道的一些总结</title>
-      <link>http://echoblog.cc/posts/golang%E5%85%B3%E4%BA%8E%E9%80%9A%E9%81%93%E7%9A%84%E4%B8%80%E4%BA%9B%E6%80%BB%E7%BB%93/</link>
-      <pubDate>Mon, 04 Jan 2021 00:00:00 +0000</pubDate>
-      
-      <guid>http://echoblog.cc/posts/golang%E5%85%B3%E4%BA%8E%E9%80%9A%E9%81%93%E7%9A%84%E4%B8%80%E4%BA%9B%E6%80%BB%E7%BB%93/</guid>
-      <description> 通道分为有缓冲与无缓冲，创建方式分别为make(chan type)或make(chan type ,0) 与make(chan type ,len)。 无缓冲通道在没有接收端或没有发送端的时候将会阻塞。 无缓冲通道可以完成两个go程的同步消息处理操作，并且无缓冲通道的接收数据会发生在唤醒放者之前。 如下图（画的不好见谅）：  如果有缓冲通道在发送时发现队列已满，则发送方将等待直至接收方取出数据，如果队列为空则接收方同样等待发送方放入数据。 for range 可以在一个未关闭的同道中循环接收数据，与 for { i, ok := &amp;lt;-ch if !ok { break } fmt.Println(i) } 等同，但当通道关闭时则会跳出循环。 select{} 将会永久阻塞，即无任何case的select 会永久阻塞 select的多个case满足则会随机选择，此特点是为了防止饥饿问题。 通道为nil时发送与接收均会阻塞，在select也会永不执行  </description>
     </item>
     
   </channel>

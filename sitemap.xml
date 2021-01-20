@@ -4,7 +4,27 @@
   
   <url>
     <loc>http://echoblog.cc/</loc>
-    <lastmod>2021-01-04T00:00:00+00:00</lastmod>
+    <lastmod>2021-01-20T00:00:00+00:00</lastmod>
+  </url>
+  
+  <url>
+    <loc>http://echoblog.cc/tags/golang/</loc>
+    <lastmod>2021-01-20T00:00:00+00:00</lastmod>
+  </url>
+  
+  <url>
+    <loc>http://echoblog.cc/posts/</loc>
+    <lastmod>2021-01-20T00:00:00+00:00</lastmod>
+  </url>
+  
+  <url>
+    <loc>http://echoblog.cc/tags/</loc>
+    <lastmod>2021-01-20T00:00:00+00:00</lastmod>
+  </url>
+  
+  <url>
+    <loc>http://echoblog.cc/posts/golangchannel%E8%A7%A3%E6%9E%90/</loc>
+    <lastmod>2021-01-20T00:00:00+00:00</lastmod>
   </url>
   
   <url>
@@ -14,21 +34,6 @@
   
   <url>
     <loc>http://echoblog.cc/about/</loc>
-    <lastmod>2021-01-04T00:00:00+00:00</lastmod>
-  </url>
-  
-  <url>
-    <loc>http://echoblog.cc/tags/golang/</loc>
-    <lastmod>2021-01-04T00:00:00+00:00</lastmod>
-  </url>
-  
-  <url>
-    <loc>http://echoblog.cc/posts/</loc>
-    <lastmod>2021-01-04T00:00:00+00:00</lastmod>
-  </url>
-  
-  <url>
-    <loc>http://echoblog.cc/tags/</loc>
     <lastmod>2021-01-04T00:00:00+00:00</lastmod>
   </url>
   
