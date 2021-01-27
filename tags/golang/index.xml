@@ -7,7 +7,31 @@
     <generator>Hugo -- gohugo.io</generator>
     <language>zh-cn</language>
     <copyright>This work is licensed under a Creative Commons Attribution-NonCommercial 4.0 International License.</copyright>
-    <lastBuildDate>Wed, 20 Jan 2021 00:00:00 +0000</lastBuildDate><atom:link href="http://echoblog.cc/tags/golang/index.xml" rel="self" type="application/rss+xml" />
+    <lastBuildDate>Wed, 27 Jan 2021 00:00:00 +0000</lastBuildDate><atom:link href="http://echoblog.cc/tags/golang/index.xml" rel="self" type="application/rss+xml" />
+    <item>
+      <title>「Golang」 Map源码解析</title>
+      <link>http://echoblog.cc/posts/golangmap%E8%A7%A3%E6%9E%90/</link>
+      <pubDate>Wed, 27 Jan 2021 00:00:00 +0000</pubDate>
+      
+      <guid>http://echoblog.cc/posts/golangmap%E8%A7%A3%E6%9E%90/</guid>
+      <description>[TOC]
+Map Map通常称哈希表（Hash Table）、散列表等，是根据键（Key）而直接访问在内存储存位置的数据结构。也就是说，它通过计算一个关于键值的函数，将所需查询的数据映射到表中一个位置来访问记录，这加快了查找速度。这个映射函数称做散列函数，存放记录的数组称做桶。哈希表是计算机科学中的最重要数据结构之一，这不仅因为它 𝑂(1) 的读写性能非常优秀，还因为它提供了键值之间的映射。想要实现一个性能优异的哈希表，需要注意两个关键点 —— 哈希函数和冲突解决方法。哈希表的实现主要需要解决两个问题，哈希函数和冲突解决。
+在很多编程语言中都有哈希表的相关库的提供，比如C++，Java等，均在语言内部标准库中实现了哈希表相关数据结构的使用方式，而在Go语言中，哈希表则是一个内嵌类型。
+哈希表设计及哈希碰撞解决方式 哈希函数 在哈希表实现过程中，哈希函数是一个很重要的部分，哈希函数选择的好坏很大程度的影响哈希表整体性能的好坏，实际上，哈希表是一个表结构，其在读写时，可以通过使用哈希函数对传入的Key进行哈希计算得出其哈希值，能够将不同Key映射到不同的索引上，一般来说，存储表结构的数据结构通常使用数组来做存储某些Key的哈希值对应的Value，通常存储这些Value的数组的每个位置，我们通常称其为桶。
+较为理想的哈希函数实现的哈希表，对其任意元素的查找速度始终为𝑂(1) 。因为其每个Key所映射到的桶都是唯一的，即每个Key都有不同的桶的位置，但是这种情况非常难以实现因为，这要求哈希函数的输出范围大于输入范围，但是由于键的数量会远远大于映射的范围，所以在实际使用时，这个理想的效果是不可能实现的。
+那么当两个不同的Key经过哈希函数计算后所得到的桶的位置是相同的时候，就产生了哈希碰撞，要注意的是，两个不同的Key产生哈希碰撞不代表两个Key的哈希值完全相同，有可能只是部分相同，比如高X位或者低X位。
+哈希碰撞 当产生哈希碰撞时，该如何解决呢？目前比较常见的就是开放地址法和链表法，接下来我们简要的了解一下这两种哈希冲突的解决办法。
+开放地址法 开放地址法的基本思想是：当发生哈希碰撞时，按照某种方法继续探测哈希表中的其他存储单元，直到找到空位置为止。这个过程可用以下过程描述：
+ 首先注明，哈希函数计算哈希索引的公式假若为： $$ index=HashFunction(Key) % Len(Bucket) $$ 其中HashFunction(Key)为求出当前Key的哈希值，然后对当前桶的总数求余
+  发现发生哈希碰撞，此时计算出的index=1（只是举例） 此时发现index=1处有Value存储，则探测index+1处也就是index=2处 如果index=2处仍然有Value存储则继续往后探测，直到找到某个桶中不存在Value（写）或者找到目标元素（读）时或到桶的长度时结束  有上述过程可以看出，当哈希表越来越满时聚集越来越严重，这导致产生非常长的探测长度，后续的数据插入将会非常费时。
+ 开放地址法对性能影响最大的是装载因子，它是数组中元素的数量与数组大小的比值。随着装载因子的增加，线性探测的平均用时就会逐渐增加，这会影响哈希表的读写性能。当装载率超过 70% 之后，哈希表的性能就会急剧下降，而一旦装载率达到 100%，整个哈希表就会完全失效，这时查找和插入任意元素的时间复杂度都是 𝑂(𝑛)的，这时需要遍历数组中的全部元素，所以在实现哈希表时一定要关注装载因子的变化。
+ 链表法 链表法的基本思想是：当发生哈希碰撞时，将该Key与其hash值相同的Key链接在同一个单链表中，因为一般来说这个链表的长度并不会太长（比如Go中这个链表长度取8），所以查询仍然可以按照𝑂(1)时间计算，链表法有一个很重要的变量，即装载因子 这个装载因子的大小会影响链表的性能，因此，当装载因子达到一定程度的时候就需要进行哈希表的扩容，装载因子的求出公式为： $$ 装载因子=哈希表总元素数量 ➗ 哈希表桶的数量 $$
+Go中的Map 概述 Map是一种方便而强大的内置数据结构，它将一种类型的Key（键）与另一种类型的Value（元素或值）关联起来。Key可以是任何可以进行比较的类型，如整数、浮点和复数、字符串、指针、interface{}（但是前提是interface中的数据类型也必须是可以比较的）、结构和数组。和切片一样，Map 也持有对底层数据结构的引用。如果你把一个Map传给一个函数，该函数改变了Map的内容，那么这些改变将在调用者中可见。
+数据结构 Map在Go中是按照一种内置数据结构的形式出现，在使用的时候只需要像使用切片那样即可：
+func main() { a := make(map[string]string,10) a[&amp;#34;test&amp;#34;]=&amp;#34;test&amp;#34; } 同时跟切片一样Map在Go语言底层也是一种结构体的实现，现在来看一下Map在Go中最底层的结构体样式以及相关字段功能：
+type hmap struct { // 当前map中元素数量 即len(map)返回的值。 	count int // 当前map所处状态标记，比如正在写入正在迭代等。 	flags uint8 // 桶的数量的值，最终map创建的桶的数量为 2^B  // 另外在使用Key的哈希值选桶的时候  // 取的是该哈希值的低B位作为选桶的值 	B uint8 // 当前溢出桶的数量 	noverflow uint16 // hash种子，在创建该结构体的时候动态生成 	hash0 uint32 // 指向第一个桶的指针 是一个连续的地址 因为是个数组  // 这里面存的是 *bmap 	buckets unsafe.</description>
+    </item>
+    
     <item>
       <title>「Golang」 通道源码解析</title>
       <link>http://echoblog.cc/posts/golangchannel%E8%A7%A3%E6%9E%90/</link>
@@ -139,17 +163,6 @@ var a [4]int b := [4]int{1, 2, 3, 4} var c = [4]int{1, 2, 3, 4} d := [...]int{1,
  与C/C++不同的是，虽然Go中数组的首地址即是数组下标为0的元素的地址，但是Go中无法像C/C++中使用数组的首地址进行++的操作，因为Go中不支持地址计算操作（使用unsafe包除外）。
  数组中如果想获取一个数组的长度，可以使用内置函数len()来获取
 func main() { var a [4]int a[0] = 5 a[1] = 2 a[2] = 5 a[3] = 7 // len 获取数组长度 	fmt.</description>
-    </item>
-    
-    <item>
-      <title>「Golang」关于通过proto消息名，创建proto.Message对象</title>
-      <link>http://echoblog.cc/posts/golang%E5%85%B3%E4%BA%8E%E9%80%9A%E8%BF%87proto%E6%B6%88%E6%81%AF%E5%90%8D%E5%88%9B%E5%BB%BAproto.message%E5%AF%B9%E8%B1%A1/</link>
-      <pubDate>Mon, 04 Jan 2021 00:00:00 +0000</pubDate>
-      
-      <guid>http://echoblog.cc/posts/golang%E5%85%B3%E4%BA%8E%E9%80%9A%E8%BF%87proto%E6%B6%88%E6%81%AF%E5%90%8D%E5%88%9B%E5%BB%BAproto.message%E5%AF%B9%E8%B1%A1/</guid>
-      <description>前几天在做一些proto相关业务逻辑编写，在编写过程中，需要通过proto的message full name 去动态的创建一个proto.Message对象，在网上找一些相关的内容也没找到，所以就自己研究了一下并且实现了这个功能。
-下面是proto v1版本实现代码。
-//该实现仅用于proto v1版本实现 即	github.com/golang/protobuf 库 func parseRequest(msgName protoreflect.FullName, data []byte) (proto.Message,error) { // 获取full name对应的message ，如果不存在则返回error 	msgType, err := protoregistry.GlobalTypes.FindMessageByName(msgName) if err != nil { return nil, err } //上面返回的是一个message 反射类型，需要把它new出一个 protoreflect.Message类型然后转换成protoiface.MessageV1 	//此时 根据源代码显示 proto.Message实现为 type Message = protoiface.MessageV1 	//即type Message 为 protoiface.MessageV1 的别名 	msg := proto.MessageV1(msgType.New()) err = proto.Unmarshal(data, msg) if err != nil { return nil, err } return msg, nil } proto v2版本实现如下</description>
     </item>
     
   </channel>

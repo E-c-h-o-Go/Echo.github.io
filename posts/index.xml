@@ -6,8 +6,937 @@
 		<generator>Hugo -- gohugo.io</generator>
 		<language>zh-cn</language>
 		<copyright>This work is licensed under a Creative Commons Attribution-NonCommercial 4.0 International License.</copyright>
-		<lastBuildDate>Wed, 20 Jan 2021 00:00:00 +0000</lastBuildDate>
+		<lastBuildDate>Wed, 27 Jan 2021 00:00:00 +0000</lastBuildDate>
 		<atom:link href="http://echoblog.cc/posts/index.xml" rel="self" type="application/rss+xml" />
+		
+		<item>
+			<title>「Golang」 Map源码解析</title>
+			<link>http://echoblog.cc/posts/golangmap%E8%A7%A3%E6%9E%90/</link>
+			<pubDate>Wed, 27 Jan 2021 00:00:00 +0000</pubDate>
+			
+			<guid>http://echoblog.cc/posts/golangmap%E8%A7%A3%E6%9E%90/</guid>
+			<description>[TOC]
+Map Map通常称哈希表（Hash Table）、散列表等，是根据键（Key）而直接访问在内存储存位置的数据结构。也就是说，它通过计算一个关于键值的函数，将所需查询的数据映射到表中一个位置来访问记录，这加快了查找速度。这个映射函数称做散列函数，存放记录的数组称做桶。哈希表是计算机科学中的最重要数据结构之一，这不仅因为它 𝑂(1) 的读写性能非常优秀，还因为它提供了键值之间的映射。想要实现一个性能优异的哈希表，需要注意两个关键点 —— 哈希函数和冲突解决方法。哈希表的实现主要需要解决两个问题，哈希函数和冲突解决。
+在很多编程语言中都有哈希表的相关库的提供，比如C++，Java等，均在语言内部标准库中实现了哈希表相关数据结构的使用方式，而在Go语言中，哈希表则是一个内嵌类型。
+哈希表设计及哈希碰撞解决方式 哈希函数 在哈希表实现过程中，哈希函数是一个很重要的部分，哈希函数选择的好坏很大程度的影响哈希表整体性能的好坏，实际上，哈希表是一个表结构，其在读写时，可以通过使用哈希函数对传入的Key进行哈希计算得出其哈希值，能够将不同Key映射到不同的索引上，一般来说，存储表结构的数据结构通常使用数组来做存储某些Key的哈希值对应的Value，通常存储这些Value的数组的每个位置，我们通常称其为桶。
+较为理想的哈希函数实现的哈希表，对其任意元素的查找速度始终为𝑂(1) 。因为其每个Key所映射到的桶都是唯一的，即每个Key都有不同的桶的位置，但是这种情况非常难以实现因为，这要求哈希函数的输出范围大于输入范围，但是由于键的数量会远远大于映射的范围，所以在实际使用时，这个理想的效果是不可能实现的。
+那么当两个不同的Key经过哈希函数计算后所得到的桶的位置是相同的时候，就产生了哈希碰撞，要注意的是，两个不同的Key产生哈希碰撞不代表两个Key的哈希值完全相同，有可能只是部分相同，比如高X位或者低X位。
+哈希碰撞 当产生哈希碰撞时，该如何解决呢？目前比较常见的就是开放地址法和链表法，接下来我们简要的了解一下这两种哈希冲突的解决办法。
+开放地址法 开放地址法的基本思想是：当发生哈希碰撞时，按照某种方法继续探测哈希表中的其他存储单元，直到找到空位置为止。这个过程可用以下过程描述：
+ 首先注明，哈希函数计算哈希索引的公式假若为： $$ index=HashFunction(Key) % Len(Bucket) $$ 其中HashFunction(Key)为求出当前Key的哈希值，然后对当前桶的总数求余
+  发现发生哈希碰撞，此时计算出的index=1（只是举例） 此时发现index=1处有Value存储，则探测index+1处也就是index=2处 如果index=2处仍然有Value存储则继续往后探测，直到找到某个桶中不存在Value（写）或者找到目标元素（读）时或到桶的长度时结束  有上述过程可以看出，当哈希表越来越满时聚集越来越严重，这导致产生非常长的探测长度，后续的数据插入将会非常费时。
+ 开放地址法对性能影响最大的是装载因子，它是数组中元素的数量与数组大小的比值。随着装载因子的增加，线性探测的平均用时就会逐渐增加，这会影响哈希表的读写性能。当装载率超过 70% 之后，哈希表的性能就会急剧下降，而一旦装载率达到 100%，整个哈希表就会完全失效，这时查找和插入任意元素的时间复杂度都是 𝑂(𝑛)的，这时需要遍历数组中的全部元素，所以在实现哈希表时一定要关注装载因子的变化。
+ 链表法 链表法的基本思想是：当发生哈希碰撞时，将该Key与其hash值相同的Key链接在同一个单链表中，因为一般来说这个链表的长度并不会太长（比如Go中这个链表长度取8），所以查询仍然可以按照𝑂(1)时间计算，链表法有一个很重要的变量，即装载因子 这个装载因子的大小会影响链表的性能，因此，当装载因子达到一定程度的时候就需要进行哈希表的扩容，装载因子的求出公式为： $$ 装载因子=哈希表总元素数量 ➗ 哈希表桶的数量 $$
+Go中的Map 概述 Map是一种方便而强大的内置数据结构，它将一种类型的Key（键）与另一种类型的Value（元素或值）关联起来。Key可以是任何可以进行比较的类型，如整数、浮点和复数、字符串、指针、interface{}（但是前提是interface中的数据类型也必须是可以比较的）、结构和数组。和切片一样，Map 也持有对底层数据结构的引用。如果你把一个Map传给一个函数，该函数改变了Map的内容，那么这些改变将在调用者中可见。
+数据结构 Map在Go中是按照一种内置数据结构的形式出现，在使用的时候只需要像使用切片那样即可：
+func main() { a := make(map[string]string,10) a[&amp;#34;test&amp;#34;]=&amp;#34;test&amp;#34; } 同时跟切片一样Map在Go语言底层也是一种结构体的实现，现在来看一下Map在Go中最底层的结构体样式以及相关字段功能：
+type hmap struct { // 当前map中元素数量 即len(map)返回的值。 	count int // 当前map所处状态标记，比如正在写入正在迭代等。 	flags uint8 // 桶的数量的值，最终map创建的桶的数量为 2^B  // 另外在使用Key的哈希值选桶的时候  // 取的是该哈希值的低B位作为选桶的值 	B uint8 // 当前溢出桶的数量 	noverflow uint16 // hash种子，在创建该结构体的时候动态生成 	hash0 uint32 // 指向第一个桶的指针 是一个连续的地址 因为是个数组  // 这里面存的是 *bmap 	buckets unsafe.</description>
+			<content type="html"><![CDATA[<p>[TOC]</p>
+<h2 id="map">Map</h2>
+<p>Map通常称哈希表（Hash Table）、散列表等，是根据键（Key）而直接访问在内存储存位置的数据结构。也就是说，它通过计算一个关于键值的函数，将所需查询的数据映射到表中一个位置来访问记录，这加快了查找速度。这个映射函数称做散列函数，存放记录的数组称做<strong>桶</strong>。哈希表是计算机科学中的最重要数据结构之一，这不仅因为它 𝑂(1) 的读写性能非常优秀，还因为它提供了键值之间的映射。想要实现一个性能优异的哈希表，需要注意两个关键点 —— 哈希函数和冲突解决方法。哈希表的实现主要需要解决两个问题，哈希函数和冲突解决。</p>
+<p>在很多编程语言中都有哈希表的相关库的提供，比如C++，Java等，均在语言内部标准库中实现了哈希表相关数据结构的使用方式，而在Go语言中，哈希表则是一个内嵌类型。</p>
+<h2 id="哈希表设计及哈希碰撞解决方式">哈希表设计及哈希碰撞解决方式</h2>
+<h3 id="哈希函数">哈希函数</h3>
+<p>在哈希表实现过程中，哈希函数是一个很重要的部分，哈希函数选择的好坏很大程度的影响哈希表整体性能的好坏，实际上，哈希表是一个表结构，其在读写时，可以通过使用哈希函数对传入的Key进行哈希计算得出其哈希值，能够将不同Key映射到不同的索引上，一般来说，存储表结构的数据结构通常使用数组来做存储某些Key的哈希值对应的Value，通常存储这些Value的数组的每个位置，我们通常称其为<strong>桶</strong>。</p>
+<p>较为理想的哈希函数实现的哈希表，对其任意元素的查找速度始终为𝑂(1) 。因为其每个Key所映射到的桶都是唯一的，即每个Key都有不同的桶的位置，但是这种情况非常难以实现因为，这要求哈希函数的输出范围大于输入范围，但是由于键的数量会远远大于映射的范围，所以在实际使用时，这个理想的效果是不可能实现的。</p>
+<p>那么当两个不同的Key经过哈希函数计算后所得到的桶的位置是相同的时候，就产生了哈希碰撞，要注意的是，两个不同的Key产生哈希碰撞不代表两个Key的哈希值完全相同，有可能只是部分相同，比如高X位或者低X位。</p>
+<h3 id="哈希碰撞">哈希碰撞</h3>
+<p>当产生哈希碰撞时，该如何解决呢？目前比较常见的就是开放地址法和链表法，接下来我们简要的了解一下这两种哈希冲突的解决办法。</p>
+<h4 id="开放地址法">开放地址法</h4>
+<p>开放地址法的基本思想是：当发生哈希碰撞时，按照某种方法继续探测哈希表中的其他存储单元，直到找到空位置为止。这个过程可用以下过程描述：</p>
+<blockquote>
+<p>首先注明，哈希函数计算哈希索引的公式假若为：
+$$
+index=HashFunction(Key) % Len(Bucket)
+$$
+其中HashFunction(Key)为求出当前Key的哈希值，然后对当前桶的总数求余</p>
+</blockquote>
+<ol>
+<li>发现发生哈希碰撞，此时计算出的index=1（只是举例）</li>
+<li>此时发现index=1处有Value存储，则探测index+1处也就是index=2处</li>
+<li>如果index=2处仍然有Value存储则继续往后探测，直到找到某个桶中不存在Value（写）或者找到目标元素（读）时或到桶的长度时结束</li>
+</ol>
+<p>有上述过程可以看出，当哈希表越来越满时聚集越来越严重，这导致产生非常长的探测长度，后续的数据插入将会非常费时。</p>
+<blockquote>
+<p>开放地址法对性能影响最大的是装载因子，它是数组中元素的数量与数组大小的比值。随着装载因子的增加，线性探测的平均用时就会逐渐增加，这会影响哈希表的读写性能。当装载率超过 70% 之后，哈希表的性能就会急剧下降，而一旦装载率达到 100%，整个哈希表就会完全失效，这时查找和插入任意元素的时间复杂度都是 𝑂(𝑛)的，这时需要遍历数组中的全部元素，所以在实现哈希表时一定要关注装载因子的变化。</p>
+</blockquote>
+<h4 id="链表法">链表法</h4>
+<p>链表法的基本思想是：当发生哈希碰撞时，将该Key与其hash值相同的Key链接在同一个单链表中，因为一般来说这个链表的长度并不会太长（比如Go中这个链表长度取8），所以查询仍然可以按照𝑂(1)时间计算，链表法有一个很重要的变量，即<strong>装载因子</strong> 这个装载因子的大小会影响链表的性能，因此，当装载因子达到一定程度的时候就需要进行哈希表的扩容，装载因子的求出公式为：
+$$
+装载因子=哈希表总元素数量 ➗ 哈希表桶的数量
+$$</p>
+<h2 id="go中的map">Go中的Map</h2>
+<h3 id="概述">概述</h3>
+<p>Map是一种方便而强大的内置数据结构，它将一种类型的Key（键）与另一种类型的Value（元素或值）关联起来。Key可以是任何可以进行比较的类型，如整数、浮点和复数、字符串、指针、interface{}（但是前提是interface中的数据类型也必须是可以比较的）、结构和数组。和切片一样，Map 也持有对底层数据结构的引用。如果你把一个Map传给一个函数，该函数改变了Map的内容，那么这些改变将在调用者中可见。</p>
+<h3 id="数据结构">数据结构</h3>
+<p>Map在Go中是按照一种内置数据结构的形式出现，在使用的时候只需要像使用切片那样即可：</p>
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go"><span class="kd">func</span> <span class="nf">main</span><span class="p">()</span> <span class="p">{</span>
+	<span class="nx">a</span> <span class="o">:=</span> <span class="nb">make</span><span class="p">(</span><span class="kd">map</span><span class="p">[</span><span class="kt">string</span><span class="p">]</span><span class="kt">string</span><span class="p">,</span><span class="mi">10</span><span class="p">)</span>
+	<span class="nx">a</span><span class="p">[</span><span class="s">&#34;test&#34;</span><span class="p">]=</span><span class="s">&#34;test&#34;</span>
+<span class="p">}</span>
+</code></pre></div><p>同时跟切片一样Map在Go语言底层也是一种结构体的实现，现在来看一下Map在Go中最底层的结构体样式以及相关字段功能：</p>
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go"><span class="kd">type</span> <span class="nx">hmap</span> <span class="kd">struct</span> <span class="p">{</span>
+  <span class="c1">// 当前map中元素数量 即len(map)返回的值。
+</span><span class="c1"></span>	<span class="nx">count</span>     <span class="kt">int</span> 
+  <span class="c1">// 当前map所处状态标记，比如正在写入正在迭代等。
+</span><span class="c1"></span>	<span class="nx">flags</span>     <span class="kt">uint8</span>
+  <span class="c1">// 桶的数量的值，最终map创建的桶的数量为 2^B 
+</span><span class="c1"></span>  <span class="c1">// 另外在使用Key的哈希值选桶的时候
+</span><span class="c1"></span>  <span class="c1">// 取的是该哈希值的低B位作为选桶的值
+</span><span class="c1"></span>	<span class="nx">B</span>         <span class="kt">uint8</span>   
+  <span class="c1">// 当前溢出桶的数量
+</span><span class="c1"></span>	<span class="nx">noverflow</span> <span class="kt">uint16</span>
+  <span class="c1">// hash种子，在创建该结构体的时候动态生成
+</span><span class="c1"></span>	<span class="nx">hash0</span>     <span class="kt">uint32</span>  
+	
+  <span class="c1">// 指向第一个桶的指针 是一个连续的地址 因为是个数组
+</span><span class="c1"></span>  <span class="c1">// 这里面存的是 *bmap
+</span><span class="c1"></span>	<span class="nx">buckets</span>    <span class="nx">unsafe</span><span class="p">.</span><span class="nx">Pointer</span>  
+  <span class="c1">// 旧桶第一个桶的指针，用于在扩容搬迁的时候未完成搬迁时保存之前的旧桶
+</span><span class="c1"></span>	<span class="nx">oldbuckets</span> <span class="nx">unsafe</span><span class="p">.</span><span class="nx">Pointer</span>  
+  <span class="c1">// 搬迁桶的进度 就是处于扩容搬迁时，目前搬到哪了
+</span><span class="c1"></span>	<span class="nx">nevacuate</span>  <span class="kt">uintptr</span> 
+  <span class="c1">// 溢出桶  当bmap中存储的数据过多
+</span><span class="c1"></span>  <span class="c1">// 单个bmap已经装满时就会使用 extra.nextOverflow 中桶存储溢出的数据。
+</span><span class="c1"></span>  <span class="c1">// 溢出桶不一定会使用，因为他是个可选字段
+</span><span class="c1"></span>	<span class="nx">extra</span> <span class="o">*</span><span class="nx">mapextra</span>  
+<span class="p">}</span>
+
+ <span class="kd">type</span> <span class="nx">mapextra</span> <span class="kd">struct</span> <span class="p">{</span>
+ <span class="c1">// 如果key和value都不包含指针，而且是内联的，那么我们就将bucket类型标记为不包含指针。
+</span><span class="c1"></span> <span class="c1">// 这样就避免了对这类地图的扫描。
+</span><span class="c1"></span> <span class="c1">// 然而，bmap.overflow 是一个指针。为了防止溢出桶被gc处理
+</span><span class="c1"></span> <span class="c1">// 我们在hmap.extra.overflow和hmap.extra.oldoverflow中存储所有溢出桶的指针。
+</span><span class="c1"></span> <span class="c1">// overflow和oldoverflow只在key和value不包含指针的情况下使用
+</span><span class="c1"></span>	<span class="nx">overflow</span>    <span class="o">*</span><span class="p">[]</span><span class="o">*</span><span class="nx">bmap</span>
+	<span class="nx">oldoverflow</span> <span class="o">*</span><span class="p">[]</span><span class="o">*</span><span class="nx">bmap</span>
+ <span class="c1">// 存储一个已经创建好了但是暂未使用的空bmap溢出桶
+</span><span class="c1"></span> 	<span class="nx">nextOverflow</span> <span class="o">*</span><span class="nx">bmap</span>
+<span class="p">}</span>
+ <span class="c1">// 实际存储k，v数据的桶
+</span><span class="c1">// 该结构体还有一些字段会在编译期添加
+</span><span class="c1">// 比如 下一个溢出桶的地址
+</span><span class="c1">// key，value所处的地址等
+</span><span class="c1"></span> <span class="kd">type</span> <span class="nx">bmap</span> <span class="kd">struct</span> <span class="p">{</span>
+   <span class="c1">// 这里存储可 Key的哈希值的高8位 例子 11111111 00000000
+</span><span class="c1"></span>   <span class="c1">// 用于在查找时快速的去判断当前Key是否存在这个桶里
+</span><span class="c1"></span>   <span class="c1">// 因此得出，每个桶只能存放8个Key-Value映射
+</span><span class="c1"></span>	<span class="nx">tophash</span> <span class="p">[</span><span class="nx">bucketCnt</span><span class="p">]</span><span class="kt">uint8</span>
+<span class="p">}</span>
+</code></pre></div><p>关于Map的结构体，就是上述代码中所描述的一些信息，由此可以得出几个信息：</p>
+<ol>
+<li>Map的最大桶的数量为1&laquo;255个，因为hmap.B为uint8类型，最大值为255.</li>
+<li>桶的数量时1&laquo;B个</li>
+<li>每个bmap只能存放8对Key-Value，当这个bmap装满的时候就会使用hmap.extra.nextOverflow中已经创建好的空bmap作为溢出桶，如果不存在则创建一个溢出桶。</li>
+</ol>
+<h3 id="构建map">构建Map</h3>
+<p>看完了Map的数据结构，那么接下来看一下Map的构建方式以及构建过程之中到底发生了什么，首先Map的几种构建方式如下：</p>
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go"><span class="kd">func</span> <span class="nf">main</span><span class="p">()</span> <span class="p">{</span>
+	<span class="nx">a</span> <span class="o">:=</span> <span class="kd">map</span><span class="p">[</span><span class="kt">int</span><span class="p">]</span><span class="kt">int</span><span class="p">{</span>
+		<span class="mi">1</span><span class="p">:</span> <span class="mi">2</span><span class="p">,</span>
+		<span class="mi">2</span><span class="p">:</span> <span class="mi">3</span><span class="p">,</span>
+	<span class="p">}</span>
+	<span class="c1">// let [a] alloc from heap
+</span><span class="c1"></span>	<span class="nx">fmt</span><span class="p">.</span><span class="nf">Println</span><span class="p">(</span><span class="nx">a</span><span class="p">)</span>
+	
+	<span class="c1">// let this map alloc alloc from stack
+</span><span class="c1"></span>	<span class="nx">_</span> <span class="p">=</span> <span class="kd">map</span><span class="p">[</span><span class="kt">int</span><span class="p">]</span><span class="kt">int</span><span class="p">{</span>
+		<span class="mi">1</span><span class="p">:</span> <span class="mi">2</span><span class="p">,</span>
+		<span class="mi">2</span><span class="p">:</span> <span class="mi">3</span><span class="p">,</span>
+	<span class="p">}</span>
+	<span class="nx">b</span> <span class="o">:=</span> <span class="nb">make</span><span class="p">(</span><span class="kd">map</span><span class="p">[</span><span class="kt">int</span><span class="p">]</span><span class="kt">int</span><span class="p">,</span> <span class="mi">10</span><span class="p">)</span>
+	<span class="nx">b</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="p">=</span> <span class="mi">2</span>
+	<span class="nx">b</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="p">=</span> <span class="mi">3</span>
+	
+	<span class="kd">var</span> <span class="nx">c</span> <span class="kd">map</span><span class="p">[</span><span class="kt">int</span><span class="p">]</span><span class="kt">int</span>
+	<span class="nx">c</span><span class="p">[</span><span class="mi">1</span><span class="p">]=</span><span class="mi">2</span> <span class="c1">// wrong! map is not init,it will panic
+</span><span class="c1"></span><span class="p">}</span>
+</code></pre></div><p>上面4种方式都是构建一个Map的方式，但是第4种方式只是声明了一个Map并未初始化，所以当对其赋值的时候会出现panic，那么这两种构建的方式区别在哪呢？遇事不决先看汇编。</p>
+<h5 id="构建方式1--小型map堆分配">构建方式1&ndash;小型Map堆分配</h5>
+<p>首先看第一个方式的汇编代码：</p>
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go">  			<span class="mh">0x002f</span> <span class="mo">00047</span>      <span class="nx">CALL</span>    <span class="nx">runtime</span><span class="p">.</span><span class="nf">makemap_small</span><span class="p">(</span><span class="nx">SB</span><span class="p">)</span>
+        <span class="mh">0x0034</span> <span class="mo">00052</span>      <span class="nf">MOVQ</span>    <span class="p">(</span><span class="nx">SP</span><span class="p">),</span> <span class="nx">AX</span>
+        <span class="mh">0x0038</span> <span class="mo">00056</span>      <span class="nx">MOVQ</span>    <span class="nx">AX</span><span class="p">,</span> <span class="s">&#34;&#34;</span><span class="p">.</span><span class="nx">a</span><span class="o">+</span><span class="mi">72</span><span class="p">(</span><span class="nx">SP</span><span class="p">)</span>
+        <span class="mh">0x003d</span> <span class="mo">00061</span>      <span class="nx">MOVQ</span>    <span class="err">$</span><span class="mi">1</span><span class="p">,</span> <span class="s">&#34;&#34;</span><span class="p">..</span><span class="nx">autotmp_4</span><span class="o">+</span><span class="mi">56</span><span class="p">(</span><span class="nx">SP</span><span class="p">)</span>
+
+</code></pre></div><p>首先不看别的只看第一行，00047 部分，此处调用了函数构建了一个新的map，此函数的实现代码如下：</p>
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go"><span class="kd">func</span> <span class="nf">makemap_small</span><span class="p">()</span> <span class="o">*</span><span class="nx">hmap</span> <span class="p">{</span>
+	<span class="nx">h</span> <span class="o">:=</span> <span class="nb">new</span><span class="p">(</span><span class="nx">hmap</span><span class="p">)</span>
+	<span class="nx">h</span><span class="p">.</span><span class="nx">hash0</span> <span class="p">=</span> <span class="nf">fastrand</span><span class="p">()</span>
+	<span class="k">return</span> <span class="nx">h</span>
+<span class="p">}</span>
+</code></pre></div><p>短短的3行代码，很简单，runtime.makemap_small() 实现了在编译时已知元素数量，即Key-Value个数&lt;=8或者make时明确len&lt;=8，且Map需要在堆上分配时（因为我这个代码下面使用了fmt.Println()输出了a，所以在堆上分配了Map），为make(map[k]v)和make(map[k]v, hint)创建Map。</p>
+<h5 id="构建方式2--小型map栈分配">构建方式2&ndash;小型Map栈分配</h5>
+<p>接下来看一下第二种Map的字面量构建方式，这种方式是在栈上构建的，因为避免输出汇编时出现未使用变量错误所以忽略了变量名，接下来看一下汇编代码：</p>
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go"> <span class="mh">0x01e2</span> <span class="mo">004</span><span class="mi">82</span>      <span class="nx">CALL</span>    <span class="nx">runtime</span><span class="p">.</span><span class="nf">fastrand</span><span class="p">(</span><span class="nx">SB</span><span class="p">)</span>
+ <span class="mh">0x01e7</span> <span class="mo">004</span><span class="mi">87</span>     <span class="nx">MOVQ</span>    <span class="s">&#34;&#34;</span><span class="p">..</span><span class="nx">autotmp_14</span><span class="o">+</span><span class="mi">312</span><span class="p">(</span><span class="nx">SP</span><span class="p">),</span> <span class="nx">AX</span>
+
+</code></pre></div><p>还是只看第一行，其调用了runtime.fastrand()，这是为什么呢？因为在编译期间，当创建的Map被分配到栈上并且其Key-Value个数&lt;=8或者make时明确len&lt;=8时，Go 语言在编译阶段会使用runtime.fastrand()快速初始化哈希，这也是编译器对小容量的哈希做的优化，也就是说会生成类似下面的代码：</p>
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go"><span class="kd">var</span> <span class="nx">h</span> <span class="o">*</span><span class="nx">hmap</span>
+<span class="kd">var</span> <span class="nx">hv</span> <span class="nx">hmap</span>
+<span class="kd">var</span> <span class="nx">bv</span> <span class="nx">bmap</span>
+<span class="nx">h</span> <span class="o">:=</span> <span class="o">&amp;</span><span class="nx">hv</span>
+<span class="nx">b</span> <span class="o">:=</span> <span class="o">&amp;</span><span class="nx">bv</span>
+<span class="nx">h</span><span class="p">.</span><span class="nx">buckets</span> <span class="p">=</span> <span class="nx">b</span>
+<span class="nx">h</span><span class="p">.</span><span class="nx">hash0</span> <span class="p">=</span> <span class="nf">fashtrand0</span><span class="p">()</span>
+</code></pre></div><h5 id="常规构建方式--make的len8或key-value个数8">常规构建方式&ndash;Make的len&gt;8或Key-Value个数&gt;8</h5>
+<p>第三种方式是经常使用的一种初始化方式，即使用make函数进行初始化，这与切片的初始化方式相同，但是不同的是，使用make初始化Map只可以传递两个参数一个是类型一个是长度，而不能像切片一样传递一个容量。</p>
+<p>接下来看一下第三种方式所产生的汇编代码：</p>
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go"><span class="mh">0x04b8</span> <span class="mo">0120</span><span class="mi">8</span>    <span class="nx">CALL</span>    <span class="nx">runtime</span><span class="p">.</span><span class="nf">makemap</span><span class="p">(</span><span class="nx">SB</span><span class="p">)</span>
+</code></pre></div><p>从上述汇编可以看出，创建Map调用了runtime.makemap()这个函数不光只有在使用make方式时会调用，也会在不满足上面2种方式的时候进行调用，也就是说runtime.makemap()是一个构建Map最后调用的都是runtime.makemap()，接下来来详细讲解这个函数的逻辑：</p>
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go"><span class="c1">// 传入的三个参数分别为
+</span><span class="c1">// 1.map的类型即 key和value的类型信息等其他数据
+</span><span class="c1">// 2.长度 即 make 传入的len
+</span><span class="c1">// 3.hmap结构体 可以为nil
+</span><span class="c1">// 返回值为经过处理的 *hmap
+</span><span class="c1"></span><span class="kd">func</span> <span class="nf">makemap</span><span class="p">(</span><span class="nx">t</span> <span class="o">*</span><span class="nx">maptype</span><span class="p">,</span> <span class="nx">hint</span> <span class="kt">int</span><span class="p">,</span> <span class="nx">h</span> <span class="o">*</span><span class="nx">hmap</span><span class="p">)</span> <span class="o">*</span><span class="nx">hmap</span> <span class="p">{</span>
+  <span class="c1">// 校验一下需求的长度和类型占用字节数的乘积
+</span><span class="c1"></span>  <span class="c1">// 是否超过内存限制
+</span><span class="c1"></span>	<span class="nx">mem</span><span class="p">,</span> <span class="nx">overflow</span> <span class="o">:=</span> <span class="nx">math</span><span class="p">.</span><span class="nf">MulUintptr</span><span class="p">(</span><span class="nb">uintptr</span><span class="p">(</span><span class="nx">hint</span><span class="p">),</span> <span class="nx">t</span><span class="p">.</span><span class="nx">bucket</span><span class="p">.</span><span class="nx">size</span><span class="p">)</span>
+	<span class="k">if</span> <span class="nx">overflow</span> <span class="o">||</span> <span class="nx">mem</span> <span class="p">&gt;</span> <span class="nx">maxAlloc</span> <span class="p">{</span>
+		<span class="nx">hint</span> <span class="p">=</span> <span class="mi">0</span>
+	<span class="p">}</span>
+	<span class="c1">// 创建一个新的 hmap结构体
+</span><span class="c1"></span> 	<span class="k">if</span> <span class="nx">h</span> <span class="o">==</span> <span class="kc">nil</span> <span class="p">{</span>
+		<span class="nx">h</span> <span class="p">=</span> <span class="nb">new</span><span class="p">(</span><span class="nx">hmap</span><span class="p">)</span>
+	<span class="p">}</span>
+  <span class="c1">// 获取一个随机的哈希种子
+</span><span class="c1"></span>	<span class="nx">h</span><span class="p">.</span><span class="nx">hash0</span> <span class="p">=</span> <span class="nf">fastrand</span><span class="p">()</span>
+
+ 	
+	<span class="nx">B</span> <span class="o">:=</span> <span class="nb">uint8</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+  <span class="c1">// 通过输入的长度 算出一个合适的B值
+</span><span class="c1"></span>	<span class="k">for</span> <span class="nf">overLoadFactor</span><span class="p">(</span><span class="nx">hint</span><span class="p">,</span> <span class="nx">B</span><span class="p">)</span> <span class="p">{</span>
+		<span class="nx">B</span><span class="o">++</span>
+	<span class="p">}</span>
+	<span class="nx">h</span><span class="p">.</span><span class="nx">B</span> <span class="p">=</span> <span class="nx">B</span>
+
+	 <span class="c1">// 如果B不为0
+</span><span class="c1"></span>	<span class="k">if</span> <span class="nx">h</span><span class="p">.</span><span class="nx">B</span> <span class="o">!=</span> <span class="mi">0</span> <span class="p">{</span>
+		<span class="kd">var</span> <span class="nx">nextOverflow</span> <span class="o">*</span><span class="nx">bmap</span>
+ 		<span class="c1">// 调用makeBucketArray 返回一个溢出bmap和开辟完内存的桶的首地址指针
+</span><span class="c1"></span>		<span class="nx">h</span><span class="p">.</span><span class="nx">buckets</span><span class="p">,</span> <span class="nx">nextOverflow</span> <span class="p">=</span> <span class="nf">makeBucketArray</span><span class="p">(</span><span class="nx">t</span><span class="p">,</span> <span class="nx">h</span><span class="p">.</span><span class="nx">B</span><span class="p">,</span> <span class="kc">nil</span><span class="p">)</span>
+    <span class="c1">// 如果有溢出bmap
+</span><span class="c1"></span>		<span class="k">if</span> <span class="nx">nextOverflow</span> <span class="o">!=</span> <span class="kc">nil</span> <span class="p">{</span>
+			<span class="nx">h</span><span class="p">.</span><span class="nx">extra</span> <span class="p">=</span> <span class="nb">new</span><span class="p">(</span><span class="nx">mapextra</span><span class="p">)</span>
+			<span class="nx">h</span><span class="p">.</span><span class="nx">extra</span><span class="p">.</span><span class="nx">nextOverflow</span> <span class="p">=</span> <span class="nx">nextOverflow</span>
+		<span class="p">}</span>
+	<span class="p">}</span>
+
+	<span class="k">return</span> <span class="nx">h</span>
+<span class="p">}</span>
+
+<span class="kd">func</span> <span class="nf">makeBucketArray</span><span class="p">(</span><span class="nx">t</span> <span class="o">*</span><span class="nx">maptype</span><span class="p">,</span> <span class="nx">b</span> <span class="kt">uint8</span><span class="p">,</span> <span class="nx">dirtyalloc</span> <span class="nx">unsafe</span><span class="p">.</span><span class="nx">Pointer</span><span class="p">)</span> <span class="p">(</span><span class="nx">buckets</span> <span class="nx">unsafe</span><span class="p">.</span><span class="nx">Pointer</span><span class="p">,</span> <span class="nx">nextOverflow</span> <span class="o">*</span><span class="nx">bmap</span><span class="p">)</span> <span class="p">{</span>
+  <span class="c1">// 求出需要桶的个数 即返回 1&lt;&lt;B的值
+</span><span class="c1"></span>	<span class="nx">base</span> <span class="o">:=</span> <span class="nf">bucketShift</span><span class="p">(</span><span class="nx">b</span><span class="p">)</span>
+	<span class="nx">nbuckets</span> <span class="o">:=</span> <span class="nx">base</span>
+	<span class="c1">// 如果需要的桶的个数小于4个 那么就不需要创建溢出bmap
+</span><span class="c1"></span>  <span class="c1">// 为的是防止有可能不需要bmap的时候却创建了bmap
+</span><span class="c1"></span>  <span class="c1">// 使其降低资源开销
+</span><span class="c1"></span>	<span class="k">if</span> <span class="nx">b</span> <span class="o">&gt;=</span> <span class="mi">4</span> <span class="p">{</span>
+		<span class="c1">// 创建的溢出bmap的数量是1&lt;&lt;（B-4）个
+</span><span class="c1"></span>    <span class="c1">// 获得所需的桶与溢出bmap的数量
+</span><span class="c1"></span>		<span class="nx">nbuckets</span> <span class="o">+=</span> <span class="nf">bucketShift</span><span class="p">(</span><span class="nx">b</span> <span class="o">-</span> <span class="mi">4</span><span class="p">)</span>
+    <span class="c1">// 计算类型 占用字节数 * 所需的桶与溢出bmap的数量的乘积
+</span><span class="c1"></span>		<span class="nx">sz</span> <span class="o">:=</span> <span class="nx">t</span><span class="p">.</span><span class="nx">bucket</span><span class="p">.</span><span class="nx">size</span> <span class="o">*</span> <span class="nx">nbuckets</span>
+    <span class="c1">// 获取对应长度的内存块的大小
+</span><span class="c1"></span>		<span class="nx">up</span> <span class="o">:=</span> <span class="nf">roundupsize</span><span class="p">(</span><span class="nx">sz</span><span class="p">)</span>
+		<span class="k">if</span> <span class="nx">up</span> <span class="o">!=</span> <span class="nx">sz</span> <span class="p">{</span>
+			<span class="nx">nbuckets</span> <span class="p">=</span> <span class="nx">up</span> <span class="o">/</span> <span class="nx">t</span><span class="p">.</span><span class="nx">bucket</span><span class="p">.</span><span class="nx">size</span>
+		<span class="p">}</span>
+	<span class="p">}</span>
+	<span class="c1">// 如果之前没分配过
+</span><span class="c1"></span>	<span class="k">if</span> <span class="nx">dirtyalloc</span> <span class="o">==</span> <span class="kc">nil</span> <span class="p">{</span>
+    <span class="c1">// 分配一个nbuckets 长度的bmap数组 返回首指针
+</span><span class="c1"></span>    <span class="c1">// 正常情况下桶和溢出bmap是连续的
+</span><span class="c1"></span>    <span class="c1">// 但是当溢出bmap过多的时候每次通过runtime.newobject申请的bmap
+</span><span class="c1"></span>    <span class="c1">// 与最初创建的不一定是连续的了
+</span><span class="c1"></span>		<span class="nx">buckets</span> <span class="p">=</span> <span class="nf">newarray</span><span class="p">(</span><span class="nx">t</span><span class="p">.</span><span class="nx">bucket</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="nx">nbuckets</span><span class="p">))</span>
+	<span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+    <span class="c1">// 这块是用来清空已经分配的桶的内存的逻辑
+</span><span class="c1"></span>		<span class="nx">buckets</span> <span class="p">=</span> <span class="nx">dirtyalloc</span>
+ 		<span class="nx">size</span> <span class="o">:=</span> <span class="nx">t</span><span class="p">.</span><span class="nx">bucket</span><span class="p">.</span><span class="nx">size</span> <span class="o">*</span> <span class="nx">nbuckets</span>
+		<span class="k">if</span> <span class="nx">t</span><span class="p">.</span><span class="nx">bucket</span><span class="p">.</span><span class="nx">ptrdata</span> <span class="o">!=</span> <span class="mi">0</span> <span class="p">{</span>
+ 			<span class="nf">memclrHasPointers</span><span class="p">(</span><span class="nx">buckets</span><span class="p">,</span> <span class="nx">size</span><span class="p">)</span>
+		<span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+			<span class="nf">memclrNoHeapPointers</span><span class="p">(</span><span class="nx">buckets</span><span class="p">,</span> <span class="nx">size</span><span class="p">)</span>
+		<span class="p">}</span>
+	<span class="p">}</span>
+	<span class="c1">// 如果创建了溢出bmap
+</span><span class="c1"></span>	<span class="k">if</span> <span class="nx">base</span> <span class="o">!=</span> <span class="nx">nbuckets</span> <span class="p">{</span>
+    <span class="c1">// 如果有溢出桶
+</span><span class="c1"></span>    <span class="c1">// 就把溢出bmap设置为申请的bmap数组的 nbuckets-base处的那个当作空闲溢出bmap
+</span><span class="c1"></span>		<span class="nx">nextOverflow</span> <span class="p">=</span> <span class="p">(</span><span class="o">*</span><span class="nx">bmap</span><span class="p">)(</span><span class="nf">add</span><span class="p">(</span><span class="nx">buckets</span><span class="p">,</span> <span class="nx">base</span><span class="o">*</span><span class="nb">uintptr</span><span class="p">(</span><span class="nx">t</span><span class="p">.</span><span class="nx">bucketsize</span><span class="p">)))</span>
+    <span class="c1">// 然后把剩下那个 即最后那个bmap（应该是）做一下标记
+</span><span class="c1"></span>    <span class="c1">// 这个地方有疑，官方的意思是
+</span><span class="c1"></span>    <span class="c1">// 我们预先分配了一些溢出桶。为了将跟踪这些溢出桶的开销降到最低
+</span><span class="c1"></span>    <span class="c1">// 我们使用的惯例是，如果一个预分配溢出桶的溢出 指针为nil
+</span><span class="c1"></span>    <span class="c1">// 那么就可以通过bumping指针来获得更多的可用指针。
+</span><span class="c1"></span>    
+    <span class="c1">// 个人理解 就是给申请好了的溢出bmap 但是还不是nextOverflow的溢出bmap
+</span><span class="c1"></span>    <span class="c1">// 加个类似标记的东西，方便下次需要nextOverflow时但 nextOverflow ==nil 时
+</span><span class="c1"></span>    <span class="c1">// 直接通过某种方式快速查找使用
+</span><span class="c1"></span>		<span class="nx">last</span> <span class="o">:=</span> <span class="p">(</span><span class="o">*</span><span class="nx">bmap</span><span class="p">)(</span><span class="nf">add</span><span class="p">(</span><span class="nx">buckets</span><span class="p">,</span> <span class="p">(</span><span class="nx">nbuckets</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">*</span><span class="nb">uintptr</span><span class="p">(</span><span class="nx">t</span><span class="p">.</span><span class="nx">bucketsize</span><span class="p">)))</span>
+		<span class="nx">last</span><span class="p">.</span><span class="nf">setoverflow</span><span class="p">(</span><span class="nx">t</span><span class="p">,</span> <span class="p">(</span><span class="o">*</span><span class="nx">bmap</span><span class="p">)(</span><span class="nx">buckets</span><span class="p">))</span>
+	<span class="p">}</span>
+	<span class="k">return</span> <span class="nx">buckets</span><span class="p">,</span> <span class="nx">nextOverflow</span>
+<span class="p">}</span>
+
+</code></pre></div><h5 id="总结">总结</h5>
+<p>至此讲完了关于构建Map的方式，接下来做个总结：</p>
+<ol>
+<li>无论是字面量初始化还是make初始化，当所需Map分配到堆上且所需长度&lt;=8时，使用runtime.makemap_small()初始化。</li>
+<li>无论是字面量初始化还是make初始化，当所需Map分配到不需要分配到堆上且所需长度&lt;=8时，通过快速哈希方式创建。</li>
+<li>其余情况会调用runtime.makemap()，该函数的执行过程如下：
+<ol>
+<li>校验是否内存溢出</li>
+<li>获得随机哈希种子</li>
+<li>计算传入长度所需的B值，这个值是最小值，即最小需要1&laquo;B个bmap</li>
+<li>如果B&lt;4则不创建溢出bmap ，为的是节省资源，否则创建1&laquo;(B-4)个溢出bmap</li>
+<li>然后创建一个所需长度的连续的bmap数组，并且返回头指针给hmap.buckets。</li>
+<li>设置溢出bmap（如果有）的一些信息。</li>
+<li>返回*hmap，也就是说 make(map)返回的是一个hmap的指针。</li>
+</ol>
+</li>
+</ol>
+<h3 id="map的读写">Map的读写</h3>
+<h4 id="map的写入删除">Map的写入/删除</h4>
+<p>在构建完Map之后，可以向Map中进行读写和删除数据了，因为删除算是写的一种，所以本章会将Map的删除和写入放到一起来讲，常见的Map的写入删除方式如下：</p>
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go"><span class="kd">func</span> <span class="nf">main</span><span class="p">()</span> <span class="p">{</span>
+	<span class="nx">m</span> <span class="o">:=</span> <span class="nb">make</span><span class="p">(</span><span class="kd">map</span><span class="p">[</span><span class="kt">int</span><span class="p">]</span><span class="kt">int</span><span class="p">,</span> <span class="mi">10</span><span class="p">)</span>
+	<span class="nx">m</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="p">=</span> <span class="mi">1</span>
+	<span class="nx">m</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="p">=</span> <span class="mi">2</span>
+	<span class="nb">delete</span><span class="p">(</span><span class="nx">m</span><span class="p">,</span><span class="mi">1</span><span class="p">)</span><span class="c1">// normal delete Key == 1
+</span><span class="c1"></span>	<span class="nb">delete</span><span class="p">(</span><span class="nx">m</span><span class="p">,</span><span class="mi">3</span><span class="p">)</span> <span class="c1">// not found Key == 3  
+</span><span class="c1"></span><span class="p">}</span>
+</code></pre></div><p>类似m[1]=1这种就是对Map的写入，即将Key设置为1并且对应的Value也是1，在写入时，如果这个Key存在于当前Map时，其目前的值就会被覆盖掉，如果不存在则会直接写入</p>
+<p>后面的delete(m,1)是一个内建函数，用于删除Map中的某个Key及其对应的值，第一个参数传递的是目标Map，第二个是Key的值，这个函数不会返回任何参数，并且当要删除的Key不存在时，也不会出现任何问题。</p>
+<h5 id="map的写入解析">Map的写入解析</h5>
+<p>现在来解析一下关于Map的写入的解析，首先还是根据上面的代码去输出汇编代码看看写入的时候到底发生了什么？</p>
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go">        <span class="mh">0x00af</span> <span class="mo">00175</span>      <span class="nx">CALL</span>    <span class="nx">runtime</span><span class="p">.</span><span class="nf">mapassign_fast64</span><span class="p">(</span><span class="nx">SB</span><span class="p">)</span>
+
+</code></pre></div><p>上述汇编代码看出，再向Map中写入数据的时候调用了runtime.mapassign_fast64()函数，但是作者并没有在runtime.map.go文件中找到相对应的函数，根据网上其他一些文章得知，最终的写入时的函数调用都会调用到runtime.mapassign()中，那么，接下来我们就开始讲一下关于runtime.mapassign()函数的一些逻辑的代码解析：</p>
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go"><span class="c1">// 该函数传入的参数分别为
+</span><span class="c1">// 1.map的类型即 key和value的类型信息等其他数据
+</span><span class="c1">// 2.那个map
+</span><span class="c1">// 3.key所在内存的地址
+</span><span class="c1">// 返回的参数为
+</span><span class="c1">// 1.找到的可用的可存储value的内存地址
+</span><span class="c1">// 返回后具体的赋值操作由汇编完成
+</span><span class="c1"></span><span class="kd">func</span> <span class="nf">mapassign</span><span class="p">(</span><span class="nx">t</span> <span class="o">*</span><span class="nx">maptype</span><span class="p">,</span> <span class="nx">h</span> <span class="o">*</span><span class="nx">hmap</span><span class="p">,</span> <span class="nx">key</span> <span class="nx">unsafe</span><span class="p">.</span><span class="nx">Pointer</span><span class="p">)</span> <span class="nx">unsafe</span><span class="p">.</span><span class="nx">Pointer</span> <span class="p">{</span>
+  <span class="c1">// 不能往nil map中进行写入
+</span><span class="c1"></span>	<span class="k">if</span> <span class="nx">h</span> <span class="o">==</span> <span class="kc">nil</span> <span class="p">{</span>
+		<span class="nb">panic</span><span class="p">(</span><span class="nf">plainError</span><span class="p">(</span><span class="s">&#34;assignment to entry in nil map&#34;</span><span class="p">))</span>
+	<span class="p">}</span>
+	
+	<span class="c1">// 校验标记为是否存在并发写状态
+</span><span class="c1"></span>  <span class="c1">// 如果是则panic
+</span><span class="c1"></span>	<span class="k">if</span> <span class="nx">h</span><span class="p">.</span><span class="nx">flags</span><span class="o">&amp;</span><span class="nx">hashWriting</span> <span class="o">!=</span> <span class="mi">0</span> <span class="p">{</span>
+		<span class="nf">throw</span><span class="p">(</span><span class="s">&#34;concurrent map writes&#34;</span><span class="p">)</span>
+	<span class="p">}</span>
+  <span class="c1">// 求出这个key的哈希值
+</span><span class="c1"></span>	<span class="nx">hash</span> <span class="o">:=</span> <span class="nx">t</span><span class="p">.</span><span class="nf">hasher</span><span class="p">(</span><span class="nx">key</span><span class="p">,</span> <span class="nb">uintptr</span><span class="p">(</span><span class="nx">h</span><span class="p">.</span><span class="nx">hash0</span><span class="p">))</span>
+
+	<span class="c1">// 设置写标记，避免并发写
+</span><span class="c1"></span>	<span class="nx">h</span><span class="p">.</span><span class="nx">flags</span> <span class="p">^=</span> <span class="nx">hashWriting</span>
+	<span class="c1">// 如果当前么得可用的桶
+</span><span class="c1"></span>  <span class="c1">// 那就创建一个bmap用于装数据
+</span><span class="c1"></span>  <span class="c1">// 调用 makemap_small 创建map的时候可能会出现此问题
+</span><span class="c1"></span>	<span class="k">if</span> <span class="nx">h</span><span class="p">.</span><span class="nx">buckets</span> <span class="o">==</span> <span class="kc">nil</span> <span class="p">{</span>
+		<span class="nx">h</span><span class="p">.</span><span class="nx">buckets</span> <span class="p">=</span> <span class="nf">newobject</span><span class="p">(</span><span class="nx">t</span><span class="p">.</span><span class="nx">bucket</span><span class="p">)</span>  
+	<span class="p">}</span>
+
+<span class="nx">again</span><span class="p">:</span>
+  <span class="c1">// 算出这个key应该落到哪个bmap里
+</span><span class="c1"></span>	<span class="nx">bucket</span> <span class="o">:=</span> <span class="nx">hash</span> <span class="o">&amp;</span> <span class="nf">bucketMask</span><span class="p">(</span><span class="nx">h</span><span class="p">.</span><span class="nx">B</span><span class="p">)</span>
+  <span class="c1">// 判断是否处于搬迁桶的状态
+</span><span class="c1"></span>  <span class="c1">// 如果处于该状态则进行旧桶 -&gt; 新桶的搬迁
+</span><span class="c1"></span>	<span class="k">if</span> <span class="nx">h</span><span class="p">.</span><span class="nf">growing</span><span class="p">()</span> <span class="p">{</span>
+		<span class="nf">growWork</span><span class="p">(</span><span class="nx">t</span><span class="p">,</span> <span class="nx">h</span><span class="p">,</span> <span class="nx">bucket</span><span class="p">)</span>
+	<span class="p">}</span>
+  <span class="c1">// 通过位移操作获得 bucket := hash &amp; bucketMask(h.B) 这个桶的对象
+</span><span class="c1"></span>	<span class="nx">b</span> <span class="o">:=</span> <span class="p">(</span><span class="o">*</span><span class="nx">bmap</span><span class="p">)(</span><span class="nx">unsafe</span><span class="p">.</span><span class="nf">Pointer</span><span class="p">(</span><span class="nb">uintptr</span><span class="p">(</span><span class="nx">h</span><span class="p">.</span><span class="nx">buckets</span><span class="p">)</span> <span class="o">+</span> <span class="nx">bucket</span><span class="o">*</span><span class="nb">uintptr</span><span class="p">(</span><span class="nx">t</span><span class="p">.</span><span class="nx">bucketsize</span><span class="p">)))</span>
+  <span class="c1">// 计算出key的哈希值之后的高8位哈希值
+</span><span class="c1"></span>	<span class="nx">top</span> <span class="o">:=</span> <span class="nf">tophash</span><span class="p">(</span><span class="nx">hash</span><span class="p">)</span>
+	
+  <span class="c1">// 元素在bmap中tophash数组的地址
+</span><span class="c1"></span>	<span class="kd">var</span> <span class="nx">inserti</span> <span class="o">*</span><span class="kt">uint8</span>
+  <span class="c1">// key的地址
+</span><span class="c1"></span>	<span class="kd">var</span> <span class="nx">insertk</span> <span class="nx">unsafe</span><span class="p">.</span><span class="nx">Pointer</span>
+  <span class="c1">// value 的地址
+</span><span class="c1"></span>	<span class="kd">var</span> <span class="nx">elem</span> <span class="nx">unsafe</span><span class="p">.</span><span class="nx">Pointer</span>
+<span class="nx">bucketloop</span><span class="p">:</span>
+	<span class="k">for</span> <span class="p">{</span>
+    <span class="c1">// 遍历当前选中的bmap
+</span><span class="c1"></span>		<span class="k">for</span> <span class="nx">i</span> <span class="o">:=</span> <span class="nb">uintptr</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span> <span class="nx">i</span> <span class="p">&lt;</span> <span class="nx">bucketCnt</span><span class="p">;</span> <span class="nx">i</span><span class="o">++</span> <span class="p">{</span>
+      <span class="c1">// 对比高8位，如果不等于
+</span><span class="c1"></span>			<span class="k">if</span> <span class="nx">b</span><span class="p">.</span><span class="nx">tophash</span><span class="p">[</span><span class="nx">i</span><span class="p">]</span> <span class="o">!=</span> <span class="nx">top</span> <span class="p">{</span>
+        <span class="c1">// 如果这个tophash为nil且当前索引=nil
+</span><span class="c1"></span>        <span class="c1">// 那么就直接用这个位置
+</span><span class="c1"></span>        <span class="c1">// 这个操作是插入且不存在扩容时的操作
+</span><span class="c1"></span>				<span class="k">if</span> <span class="nf">isEmpty</span><span class="p">(</span><span class="nx">b</span><span class="p">.</span><span class="nx">tophash</span><span class="p">[</span><span class="nx">i</span><span class="p">])</span> <span class="o">&amp;&amp;</span> <span class="nx">inserti</span> <span class="o">==</span> <span class="kc">nil</span> <span class="p">{</span>
+          <span class="c1">// 设置元素在bmap中tophash数组的地址
+</span><span class="c1"></span>					<span class="nx">inserti</span> <span class="p">=</span> <span class="o">&amp;</span><span class="nx">b</span><span class="p">.</span><span class="nx">tophash</span><span class="p">[</span><span class="nx">i</span><span class="p">]</span>
+          <span class="c1">// 通过位移找到对应的可用的key的地址位置
+</span><span class="c1"></span>					<span class="nx">insertk</span> <span class="p">=</span> <span class="nf">add</span><span class="p">(</span><span class="nx">unsafe</span><span class="p">.</span><span class="nf">Pointer</span><span class="p">(</span><span class="nx">b</span><span class="p">),</span> <span class="nx">dataOffset</span><span class="o">+</span><span class="nx">i</span><span class="o">*</span><span class="nb">uintptr</span><span class="p">(</span><span class="nx">t</span><span class="p">.</span><span class="nx">keysize</span><span class="p">))</span>
+          <span class="c1">// 通过位移找到对应的可用的value的地址位置
+</span><span class="c1"></span>					<span class="nx">elem</span> <span class="p">=</span> <span class="nf">add</span><span class="p">(</span><span class="nx">unsafe</span><span class="p">.</span><span class="nf">Pointer</span><span class="p">(</span><span class="nx">b</span><span class="p">),</span> <span class="nx">dataOffset</span><span class="o">+</span><span class="nx">bucketCnt</span><span class="o">*</span><span class="nb">uintptr</span><span class="p">(</span><span class="nx">t</span><span class="p">.</span><span class="nx">keysize</span><span class="p">)</span><span class="o">+</span><span class="nx">i</span><span class="o">*</span><span class="nb">uintptr</span><span class="p">(</span><span class="nx">t</span><span class="p">.</span><span class="nx">elemsize</span><span class="p">))</span>
+				<span class="p">}</span>
+        <span class="c1">// 如果 b.tophash[i] == emptyRest 
+</span><span class="c1"></span>        <span class="c1">// 代表后续的b.tophash没有 溢出bmap或者可遍历的b.tophash了
+</span><span class="c1"></span>				<span class="k">if</span> <span class="nx">b</span><span class="p">.</span><span class="nx">tophash</span><span class="p">[</span><span class="nx">i</span><span class="p">]</span> <span class="o">==</span> <span class="nx">emptyRest</span> <span class="p">{</span>
+          <span class="c1">// 跳出循环
+</span><span class="c1"></span>					<span class="k">break</span> <span class="nx">bucketloop</span>
+				<span class="p">}</span>
+				<span class="k">continue</span>
+			<span class="p">}</span>
+      <span class="c1">// 偏移到到对应的key的位置
+</span><span class="c1"></span>			<span class="nx">k</span> <span class="o">:=</span> <span class="nf">add</span><span class="p">(</span><span class="nx">unsafe</span><span class="p">.</span><span class="nf">Pointer</span><span class="p">(</span><span class="nx">b</span><span class="p">),</span> <span class="nx">dataOffset</span><span class="o">+</span><span class="nx">i</span><span class="o">*</span><span class="nb">uintptr</span><span class="p">(</span><span class="nx">t</span><span class="p">.</span><span class="nx">keysize</span><span class="p">))</span>
+			<span class="k">if</span> <span class="nx">t</span><span class="p">.</span><span class="nf">indirectkey</span><span class="p">()</span> <span class="p">{</span>
+				<span class="nx">k</span> <span class="p">=</span> <span class="o">*</span><span class="p">((</span><span class="o">*</span><span class="nx">unsafe</span><span class="p">.</span><span class="nx">Pointer</span><span class="p">)(</span><span class="nx">k</span><span class="p">))</span>
+			<span class="p">}</span>
+      <span class="c1">// 传入的key的值和当前k处存在的key的值比较一下是否相等 
+</span><span class="c1"></span>      <span class="c1">// 如果不相等代表没找到
+</span><span class="c1"></span>			<span class="k">if</span> <span class="p">!</span><span class="nx">t</span><span class="p">.</span><span class="nx">key</span><span class="p">.</span><span class="nf">equal</span><span class="p">(</span><span class="nx">key</span><span class="p">,</span> <span class="nx">k</span><span class="p">)</span> <span class="p">{</span>
+				<span class="k">continue</span>
+			<span class="p">}</span>
+			<span class="c1">// 如果相等那么就代表是更新操作
+</span><span class="c1"></span>      <span class="c1">// 先把传入的key的赋值到k处
+</span><span class="c1"></span>      <span class="k">if</span> <span class="nx">t</span><span class="p">.</span><span class="nf">needkeyupdate</span><span class="p">()</span> <span class="p">{</span>
+				<span class="nf">typedmemmove</span><span class="p">(</span><span class="nx">t</span><span class="p">.</span><span class="nx">key</span><span class="p">,</span> <span class="nx">k</span><span class="p">,</span> <span class="nx">key</span><span class="p">)</span>
+			<span class="p">}</span>
+      <span class="c1">// 计算出k对应value的地址
+</span><span class="c1"></span>			<span class="nx">elem</span> <span class="p">=</span> <span class="nf">add</span><span class="p">(</span><span class="nx">unsafe</span><span class="p">.</span><span class="nf">Pointer</span><span class="p">(</span><span class="nx">b</span><span class="p">),</span> <span class="nx">dataOffset</span><span class="o">+</span><span class="nx">bucketCnt</span><span class="o">*</span><span class="nb">uintptr</span><span class="p">(</span><span class="nx">t</span><span class="p">.</span><span class="nx">keysize</span><span class="p">)</span><span class="o">+</span><span class="nx">i</span><span class="o">*</span><span class="nb">uintptr</span><span class="p">(</span><span class="nx">t</span><span class="p">.</span><span class="nx">elemsize</span><span class="p">))</span>
+      <span class="c1">// 直接跳转到结束
+</span><span class="c1"></span>			<span class="k">goto</span> <span class="nx">done</span>
+		<span class="p">}</span>
+    <span class="c1">// 获取溢出bmap
+</span><span class="c1"></span>    <span class="c1">// 代表在当前bmap里面么得找到可用的地址
+</span><span class="c1"></span>		<span class="nx">ovf</span> <span class="o">:=</span> <span class="nx">b</span><span class="p">.</span><span class="nf">overflow</span><span class="p">(</span><span class="nx">t</span><span class="p">)</span>
+    <span class="c1">// 没有溢出bmap就跳出
+</span><span class="c1"></span>		<span class="k">if</span> <span class="nx">ovf</span> <span class="o">==</span> <span class="kc">nil</span> <span class="p">{</span>
+			<span class="k">break</span>
+		<span class="p">}</span>
+    <span class="c1">// 继续循环
+</span><span class="c1"></span>		<span class="nx">b</span> <span class="p">=</span> <span class="nx">ovf</span>
+	<span class="p">}</span>
+	<span class="c1">// 如果没找到可用的插槽，那么就创建一个
+</span><span class="c1"></span>	 
+  <span class="c1">// 判断是否需要扩容
+</span><span class="c1"></span>  <span class="c1">// 扩容条件为：
+</span><span class="c1"></span>  <span class="c1">// 1.当装载因子&gt;=6.5
+</span><span class="c1"></span>  <span class="c1">// 2.溢出bmap过多
+</span><span class="c1"></span>  <span class="c1">// 第二种情况只会出现在先大量的写然后再大量删除的情况
+</span><span class="c1"></span>	<span class="k">if</span> <span class="p">!</span><span class="nx">h</span><span class="p">.</span><span class="nf">growing</span><span class="p">()</span> <span class="o">&amp;&amp;</span> <span class="p">(</span><span class="nf">overLoadFactor</span><span class="p">(</span><span class="nx">h</span><span class="p">.</span><span class="nx">count</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span> <span class="nx">h</span><span class="p">.</span><span class="nx">B</span><span class="p">)</span> <span class="o">||</span> <span class="nf">tooManyOverflowBuckets</span><span class="p">(</span><span class="nx">h</span><span class="p">.</span><span class="nx">noverflow</span><span class="p">,</span> <span class="nx">h</span><span class="p">.</span><span class="nx">B</span><span class="p">))</span> <span class="p">{</span>
+    <span class="c1">// 扩容
+</span><span class="c1"></span>		<span class="nf">hashGrow</span><span class="p">(</span><span class="nx">t</span><span class="p">,</span> <span class="nx">h</span><span class="p">)</span>
+    <span class="c1">// 重新找
+</span><span class="c1"></span>		<span class="k">goto</span> <span class="nx">again</span>  
+	<span class="p">}</span>
+	<span class="c1">// 如果在当前的bmap及其溢出的bmap都没找到合适的地方
+</span><span class="c1"></span>  <span class="c1">// 即 所有的bmap都满了
+</span><span class="c1"></span>  <span class="c1">// 那就创建一个新的溢出bmap
+</span><span class="c1"></span>	<span class="k">if</span> <span class="nx">inserti</span> <span class="o">==</span> <span class="kc">nil</span> <span class="p">{</span>
+		<span class="nx">newb</span> <span class="o">:=</span> <span class="nx">h</span><span class="p">.</span><span class="nf">newoverflow</span><span class="p">(</span><span class="nx">t</span><span class="p">,</span> <span class="nx">b</span><span class="p">)</span>
+		<span class="nx">inserti</span> <span class="p">=</span> <span class="o">&amp;</span><span class="nx">newb</span><span class="p">.</span><span class="nx">tophash</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+		<span class="nx">insertk</span> <span class="p">=</span> <span class="nf">add</span><span class="p">(</span><span class="nx">unsafe</span><span class="p">.</span><span class="nf">Pointer</span><span class="p">(</span><span class="nx">newb</span><span class="p">),</span> <span class="nx">dataOffset</span><span class="p">)</span>
+		<span class="nx">elem</span> <span class="p">=</span> <span class="nf">add</span><span class="p">(</span><span class="nx">insertk</span><span class="p">,</span> <span class="nx">bucketCnt</span><span class="o">*</span><span class="nb">uintptr</span><span class="p">(</span><span class="nx">t</span><span class="p">.</span><span class="nx">keysize</span><span class="p">))</span>
+	<span class="p">}</span>
+
+	<span class="c1">// 将新key/elem存储在插入位置	
+</span><span class="c1"></span>  <span class="k">if</span> <span class="nx">t</span><span class="p">.</span><span class="nf">indirectkey</span><span class="p">()</span> <span class="p">{</span>
+		<span class="nx">kmem</span> <span class="o">:=</span> <span class="nf">newobject</span><span class="p">(</span><span class="nx">t</span><span class="p">.</span><span class="nx">key</span><span class="p">)</span>
+		<span class="o">*</span><span class="p">(</span><span class="o">*</span><span class="nx">unsafe</span><span class="p">.</span><span class="nx">Pointer</span><span class="p">)(</span><span class="nx">insertk</span><span class="p">)</span> <span class="p">=</span> <span class="nx">kmem</span>
+		<span class="nx">insertk</span> <span class="p">=</span> <span class="nx">kmem</span>
+	<span class="p">}</span>
+	<span class="k">if</span> <span class="nx">t</span><span class="p">.</span><span class="nf">indirectelem</span><span class="p">()</span> <span class="p">{</span>
+		<span class="nx">vmem</span> <span class="o">:=</span> <span class="nf">newobject</span><span class="p">(</span><span class="nx">t</span><span class="p">.</span><span class="nx">elem</span><span class="p">)</span>
+		<span class="o">*</span><span class="p">(</span><span class="o">*</span><span class="nx">unsafe</span><span class="p">.</span><span class="nx">Pointer</span><span class="p">)(</span><span class="nx">elem</span><span class="p">)</span> <span class="p">=</span> <span class="nx">vmem</span>
+	<span class="p">}</span>
+  <span class="c1">// 把插入的key的值写入到对应的key的地址里
+</span><span class="c1"></span>	<span class="nf">typedmemmove</span><span class="p">(</span><span class="nx">t</span><span class="p">.</span><span class="nx">key</span><span class="p">,</span> <span class="nx">insertk</span><span class="p">,</span> <span class="nx">key</span><span class="p">)</span>
+  <span class="c1">// 把插入的key的高8值写入到对应的tophash的地址里 
+</span><span class="c1"></span>	<span class="o">*</span><span class="nx">inserti</span> <span class="p">=</span> <span class="nx">top</span>
+  <span class="c1">// 当前元素个数+1
+</span><span class="c1"></span>	<span class="nx">h</span><span class="p">.</span><span class="nx">count</span><span class="o">++</span>
+
+<span class="nx">done</span><span class="p">:</span>
+  <span class="c1">// 再次校验并发写
+</span><span class="c1"></span>	<span class="k">if</span> <span class="nx">h</span><span class="p">.</span><span class="nx">flags</span><span class="o">&amp;</span><span class="nx">hashWriting</span> <span class="o">==</span> <span class="mi">0</span> <span class="p">{</span>
+		<span class="nf">throw</span><span class="p">(</span><span class="s">&#34;concurrent map writes&#34;</span><span class="p">)</span>
+	<span class="p">}</span>
+  <span class="c1">// 取消写标记
+</span><span class="c1"></span>	<span class="nx">h</span><span class="p">.</span><span class="nx">flags</span> <span class="o">&amp;^=</span> <span class="nx">hashWriting</span>
+	<span class="k">if</span> <span class="nx">t</span><span class="p">.</span><span class="nf">indirectelem</span><span class="p">()</span> <span class="p">{</span>
+		<span class="nx">elem</span> <span class="p">=</span> <span class="o">*</span><span class="p">((</span><span class="o">*</span><span class="nx">unsafe</span><span class="p">.</span><span class="nx">Pointer</span><span class="p">)(</span><span class="nx">elem</span><span class="p">))</span>
+	<span class="p">}</span>
+  <span class="c1">// 返回可用的value 存放地址
+</span><span class="c1"></span>  <span class="c1">// 随后的赋值操作会在汇编中进行
+</span><span class="c1"></span>	<span class="k">return</span> <span class="nx">elem</span>
+<span class="p">}</span>
+
+</code></pre></div><h6 id="map写入操作过程的总结">Map写入操作过程的总结</h6>
+<ol>
+<li>首先会计算出传入Key的哈希，其低B位用于选择对应的bmap，其哈希值的高8位用于在对应的bmap中快速的查找是否有此key的存在，并且对该map打上写标记，防止并发读写。</li>
+<li>遍历找到的bmap及其溢出bmap，并按照下面的条件执行
+<ol>
+<li>如果比较到当前的tophash不等于传入key的tophash，且未找到可用tophash地址时，如果当前tophash无已存放的key，那么记录下这个tophash的地址和其对应的k，v的地址，此条件为插入操作。</li>
+<li>如果当前tophash是emptyRest，则代表后续没有溢出bmap或者可遍历的tophash了</li>
+<li>如果当前的tophash==传入key的tophash，则会对比传入的Key以及tophash对应的Key的地址的值是否相等，如果相等则代表已经存在了当前传入的Key，则此操作为更新操作，此时计算出对应value的存放地址</li>
+<li>如果上述条件都不满足则遍历溢出bmap（如果有）</li>
+</ol>
+</li>
+<li>如果在bmap及其溢出bmap中都没有找到可用的存放地址，则创建一个新的溢出bmap，因为没找到说明没有可用的tophash位置了，即所有的bmap都满了。</li>
+<li>如果符合下列扩容条件就会产生扩容，扩容完毕后重新开始 序号2 的过程。
+<ol>
+<li>当装载因子&gt;=6.5</li>
+<li>溢出bmap过多，该情况只会出现在先大量的写然后再大量删除但装载因子并没有&gt;=6.5的情况</li>
+</ol>
+</li>
+<li>如果不需要扩容则创建一个新的bmap，给传入Key的哈希，其低B位用于选择对应的bmap的溢出bmap链表尾部，然后获得可用的tophash，key，value地址。然后取消写标记，返回可用的value 存放地址 ， 随后的赋值操作会在汇编中进行</li>
+</ol>
+<h6 id="map的扩容">Map的扩容</h6>
+<p>在刚才的上文说了，写入的时候如果在bmap及其溢出bmap中都没有找到可用的存放地址，则创建一个新的溢出bmap，因为没找到说明没有可用的tophash位置了，即所有的bmap都满了。那么我们接下来看一下这个关于扩容函数hashGrow()的源代码解析</p>
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go"><span class="kd">func</span> <span class="nf">hashGrow</span><span class="p">(</span><span class="nx">t</span> <span class="o">*</span><span class="nx">maptype</span><span class="p">,</span> <span class="nx">h</span> <span class="o">*</span><span class="nx">hmap</span><span class="p">)</span> <span class="p">{</span>
+	<span class="c1">// 需要扩容多少bmap
+</span><span class="c1"></span>  <span class="c1">// 默认为翻倍扩容
+</span><span class="c1"></span>  <span class="c1">// 此情况为装载因子&gt;=6.5
+</span><span class="c1"></span>	<span class="nx">bigger</span> <span class="o">:=</span> <span class="nb">uint8</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+	<span class="k">if</span> <span class="p">!</span><span class="nf">overLoadFactor</span><span class="p">(</span><span class="nx">h</span><span class="p">.</span><span class="nx">count</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span> <span class="nx">h</span><span class="p">.</span><span class="nx">B</span><span class="p">)</span> <span class="p">{</span>
+    <span class="c1">// 如果是因为溢出bmap过多导致扩容
+</span><span class="c1"></span>    <span class="c1">// 则不会增加新的bmap
+</span><span class="c1"></span>    <span class="c1">// 此情况为等量扩容（整理）
+</span><span class="c1"></span>		<span class="nx">bigger</span> <span class="p">=</span> <span class="mi">0</span>
+		<span class="nx">h</span><span class="p">.</span><span class="nx">flags</span> <span class="o">|=</span> <span class="nx">sameSizeGrow</span>
+	<span class="p">}</span>
+  <span class="c1">// 把原来的bmap列表放到旧bmap字段里
+</span><span class="c1"></span>	<span class="nx">oldbuckets</span> <span class="o">:=</span> <span class="nx">h</span><span class="p">.</span><span class="nx">buckets</span>
+  <span class="c1">// 申请新的翻倍长度的bmap 因为bmap的个数为1&lt;&lt;B个所以当B+1时就会增加一倍
+</span><span class="c1"></span>	<span class="nx">newbuckets</span><span class="p">,</span> <span class="nx">nextOverflow</span> <span class="o">:=</span> <span class="nf">makeBucketArray</span><span class="p">(</span><span class="nx">t</span><span class="p">,</span> <span class="nx">h</span><span class="p">.</span><span class="nx">B</span><span class="o">+</span><span class="nx">bigger</span><span class="p">,</span> <span class="kc">nil</span><span class="p">)</span>
+	<span class="c1">// 判断当前状态
+</span><span class="c1"></span>	<span class="nx">flags</span> <span class="o">:=</span> <span class="nx">h</span><span class="p">.</span><span class="nx">flags</span> <span class="o">&amp;^</span> <span class="p">(</span><span class="nx">iterator</span> <span class="p">|</span> <span class="nx">oldIterator</span><span class="p">)</span>
+  <span class="c1">// 如果当前状态不是迭代状态
+</span><span class="c1"></span>	<span class="k">if</span> <span class="nx">h</span><span class="p">.</span><span class="nx">flags</span><span class="o">&amp;</span><span class="nx">iterator</span> <span class="o">!=</span> <span class="mi">0</span> <span class="p">{</span>
+    <span class="c1">// 让迭代的时候去迭代旧桶
+</span><span class="c1"></span>    <span class="c1">// 因为还没有搬迁完毕
+</span><span class="c1"></span>		<span class="nx">flags</span> <span class="o">|=</span> <span class="nx">oldIterator</span>
+	<span class="p">}</span>
+	<span class="c1">// 对hmap做赋值操作
+</span><span class="c1"></span>	<span class="nx">h</span><span class="p">.</span><span class="nx">B</span> <span class="o">+=</span> <span class="nx">bigger</span>
+	<span class="nx">h</span><span class="p">.</span><span class="nx">flags</span> <span class="p">=</span> <span class="nx">flags</span>
+	<span class="nx">h</span><span class="p">.</span><span class="nx">oldbuckets</span> <span class="p">=</span> <span class="nx">oldbuckets</span>
+	<span class="nx">h</span><span class="p">.</span><span class="nx">buckets</span> <span class="p">=</span> <span class="nx">newbuckets</span>
+	<span class="nx">h</span><span class="p">.</span><span class="nx">nevacuate</span> <span class="p">=</span> <span class="mi">0</span>
+	<span class="nx">h</span><span class="p">.</span><span class="nx">noverflow</span> <span class="p">=</span> <span class="mi">0</span>
+	
+  <span class="c1">// 如果之前有溢出bmap的话，把原来所持有的溢出bmap也变成旧的溢出bmap
+</span><span class="c1"></span>	<span class="k">if</span> <span class="nx">h</span><span class="p">.</span><span class="nx">extra</span> <span class="o">!=</span> <span class="kc">nil</span> <span class="o">&amp;&amp;</span> <span class="nx">h</span><span class="p">.</span><span class="nx">extra</span><span class="p">.</span><span class="nx">overflow</span> <span class="o">!=</span> <span class="kc">nil</span> <span class="p">{</span>
+		<span class="k">if</span> <span class="nx">h</span><span class="p">.</span><span class="nx">extra</span><span class="p">.</span><span class="nx">oldoverflow</span> <span class="o">!=</span> <span class="kc">nil</span> <span class="p">{</span>
+			<span class="nf">throw</span><span class="p">(</span><span class="s">&#34;oldoverflow is not nil&#34;</span><span class="p">)</span>
+      <span class="p">}</span>
+		<span class="nx">h</span><span class="p">.</span><span class="nx">extra</span><span class="p">.</span><span class="nx">oldoverflow</span> <span class="p">=</span> <span class="nx">h</span><span class="p">.</span><span class="nx">extra</span><span class="p">.</span><span class="nx">overflow</span>
+		<span class="nx">h</span><span class="p">.</span><span class="nx">extra</span><span class="p">.</span><span class="nx">overflow</span> <span class="p">=</span> <span class="kc">nil</span>
+	<span class="p">}</span>
+  <span class="c1">// 如果扩容的新bmap列表存在可用溢出bmap
+</span><span class="c1"></span>  <span class="c1">// 那就设置一下
+</span><span class="c1"></span>	<span class="k">if</span> <span class="nx">nextOverflow</span> <span class="o">!=</span> <span class="kc">nil</span> <span class="p">{</span>
+		<span class="k">if</span> <span class="nx">h</span><span class="p">.</span><span class="nx">extra</span> <span class="o">==</span> <span class="kc">nil</span> <span class="p">{</span>
+			<span class="nx">h</span><span class="p">.</span><span class="nx">extra</span> <span class="p">=</span> <span class="nb">new</span><span class="p">(</span><span class="nx">mapextra</span><span class="p">)</span>
+		<span class="p">}</span>
+		<span class="nx">h</span><span class="p">.</span><span class="nx">extra</span><span class="p">.</span><span class="nx">nextOverflow</span> <span class="p">=</span> <span class="nx">nextOverflow</span>
+	<span class="p">}</span>
+
+	<span class="c1">// 此处没有发现扩容时的数据搬迁（从旧bmap中拷贝原数据到新的bmap中）工作
+</span><span class="c1"></span> 	<span class="c1">// 因为哈希表数据的实际复制是由growWork()和evacuate()逐步完成的。
+</span><span class="c1"></span>  <span class="c1">// 这两个函数的触发时机是在写/删除操作时触发
+</span><span class="c1"></span><span class="p">}</span>
+
+<span class="kd">func</span> <span class="nf">growWork</span><span class="p">(</span><span class="nx">t</span> <span class="o">*</span><span class="nx">maptype</span><span class="p">,</span> <span class="nx">h</span> <span class="o">*</span><span class="nx">hmap</span><span class="p">,</span> <span class="nx">bucket</span> <span class="kt">uintptr</span><span class="p">)</span> <span class="p">{</span>
+	<span class="c1">// 计算一下当前的Key的hash出来的桶的索引在旧桶的哪个位置
+</span><span class="c1"></span>	<span class="nf">evacuate</span><span class="p">(</span><span class="nx">t</span><span class="p">,</span> <span class="nx">h</span><span class="p">,</span> <span class="nx">bucket</span><span class="o">&amp;</span><span class="nx">h</span><span class="p">.</span><span class="nf">oldbucketmask</span><span class="p">())</span>
+	<span class="c1">// 如果搬完了一个之后发现还没搬迁完
+</span><span class="c1"></span>  <span class="c1">// 就再搬一个
+</span><span class="c1"></span>	<span class="k">if</span> <span class="nx">h</span><span class="p">.</span><span class="nf">growing</span><span class="p">()</span> <span class="p">{</span>
+		<span class="nf">evacuate</span><span class="p">(</span><span class="nx">t</span><span class="p">,</span> <span class="nx">h</span><span class="p">,</span> <span class="nx">h</span><span class="p">.</span><span class="nx">nevacuate</span><span class="p">)</span>
+	<span class="p">}</span>
+<span class="p">}</span>
+
+<span class="c1">//  用于保存分配上下文的结构体
+</span><span class="c1"></span><span class="kd">type</span> <span class="nx">evacDst</span> <span class="kd">struct</span> <span class="p">{</span>
+	<span class="nx">b</span> <span class="o">*</span><span class="nx">bmap</span>          <span class="c1">// 当前目标存储桶
+</span><span class="c1"></span>	<span class="nx">i</span> <span class="kt">int</span>            <span class="c1">// 键/元素索引到b
+</span><span class="c1"></span>	<span class="nx">k</span> <span class="nx">unsafe</span><span class="p">.</span><span class="nx">Pointer</span> <span class="c1">// 指向当前key的指针
+</span><span class="c1"></span>	<span class="nx">e</span> <span class="nx">unsafe</span><span class="p">.</span><span class="nx">Pointer</span> <span class="c1">// 指向当前value的指针
+</span><span class="c1"></span><span class="p">}</span>
+ <span class="c1">// 实际的旧bmap 搬迁到新bmap的逻辑
+</span><span class="c1"></span> <span class="c1">// 第三个参数是搬迁的那个桶
+</span><span class="c1"></span><span class="kd">func</span> <span class="nf">evacuate</span><span class="p">(</span><span class="nx">t</span> <span class="o">*</span><span class="nx">maptype</span><span class="p">,</span> <span class="nx">h</span> <span class="o">*</span><span class="nx">hmap</span><span class="p">,</span> <span class="nx">oldbucket</span> <span class="kt">uintptr</span><span class="p">)</span> <span class="p">{</span>
+  <span class="c1">// 找到要搬迁的桶
+</span><span class="c1"></span>	<span class="nx">b</span> <span class="o">:=</span> <span class="p">(</span><span class="o">*</span><span class="nx">bmap</span><span class="p">)(</span><span class="nf">add</span><span class="p">(</span><span class="nx">h</span><span class="p">.</span><span class="nx">oldbuckets</span><span class="p">,</span> <span class="nx">oldbucket</span><span class="o">*</span><span class="nb">uintptr</span><span class="p">(</span><span class="nx">t</span><span class="p">.</span><span class="nx">bucketsize</span><span class="p">)))</span>
+  <span class="c1">// 算一下之前有多少个桶
+</span><span class="c1"></span>	<span class="nx">newbit</span> <span class="o">:=</span> <span class="nx">h</span><span class="p">.</span><span class="nf">noldbuckets</span><span class="p">()</span>
+  <span class="c1">// 判断是不是没有东西的bmap
+</span><span class="c1"></span>	<span class="k">if</span> <span class="p">!</span><span class="nf">evacuated</span><span class="p">(</span><span class="nx">b</span><span class="p">)</span> <span class="p">{</span>
+    <span class="c1">// 生成两个用于保存新桶上下文的结构体
+</span><span class="c1"></span>		<span class="kd">var</span> <span class="nx">xy</span> <span class="p">[</span><span class="mi">2</span><span class="p">]</span><span class="nx">evacDst</span>
+    <span class="c1">// 先保存一个 新bmap的上下文信息
+</span><span class="c1"></span>		<span class="nx">x</span> <span class="o">:=</span> <span class="o">&amp;</span><span class="nx">xy</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+		<span class="nx">x</span><span class="p">.</span><span class="nx">b</span> <span class="p">=</span> <span class="p">(</span><span class="o">*</span><span class="nx">bmap</span><span class="p">)(</span><span class="nf">add</span><span class="p">(</span><span class="nx">h</span><span class="p">.</span><span class="nx">buckets</span><span class="p">,</span> <span class="nx">oldbucket</span><span class="o">*</span><span class="nb">uintptr</span><span class="p">(</span><span class="nx">t</span><span class="p">.</span><span class="nx">bucketsize</span><span class="p">)))</span>
+		<span class="nx">x</span><span class="p">.</span><span class="nx">k</span> <span class="p">=</span> <span class="nf">add</span><span class="p">(</span><span class="nx">unsafe</span><span class="p">.</span><span class="nf">Pointer</span><span class="p">(</span><span class="nx">x</span><span class="p">.</span><span class="nx">b</span><span class="p">),</span> <span class="nx">dataOffset</span><span class="p">)</span>
+		<span class="nx">x</span><span class="p">.</span><span class="nx">e</span> <span class="p">=</span> <span class="nf">add</span><span class="p">(</span><span class="nx">x</span><span class="p">.</span><span class="nx">k</span><span class="p">,</span> <span class="nx">bucketCnt</span><span class="o">*</span><span class="nb">uintptr</span><span class="p">(</span><span class="nx">t</span><span class="p">.</span><span class="nx">keysize</span><span class="p">))</span>
+		<span class="c1">// 如果当前不是等量扩容（整理）
+</span><span class="c1"></span>    <span class="c1">// 那么就搬两个桶
+</span><span class="c1"></span>    <span class="c1">// 再获取一个新的bmap的上下文信息
+</span><span class="c1"></span>    <span class="k">if</span> <span class="p">!</span><span class="nx">h</span><span class="p">.</span><span class="nf">sameSizeGrow</span><span class="p">()</span> <span class="p">{</span>
+			<span class="nx">y</span> <span class="o">:=</span> <span class="o">&amp;</span><span class="nx">xy</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+			<span class="nx">y</span><span class="p">.</span><span class="nx">b</span> <span class="p">=</span> <span class="p">(</span><span class="o">*</span><span class="nx">bmap</span><span class="p">)(</span><span class="nf">add</span><span class="p">(</span><span class="nx">h</span><span class="p">.</span><span class="nx">buckets</span><span class="p">,</span> <span class="p">(</span><span class="nx">oldbucket</span><span class="o">+</span><span class="nx">newbit</span><span class="p">)</span><span class="o">*</span><span class="nb">uintptr</span><span class="p">(</span><span class="nx">t</span><span class="p">.</span><span class="nx">bucketsize</span><span class="p">)))</span>
+			<span class="nx">y</span><span class="p">.</span><span class="nx">k</span> <span class="p">=</span> <span class="nf">add</span><span class="p">(</span><span class="nx">unsafe</span><span class="p">.</span><span class="nf">Pointer</span><span class="p">(</span><span class="nx">y</span><span class="p">.</span><span class="nx">b</span><span class="p">),</span> <span class="nx">dataOffset</span><span class="p">)</span>
+			<span class="nx">y</span><span class="p">.</span><span class="nx">e</span> <span class="p">=</span> <span class="nf">add</span><span class="p">(</span><span class="nx">y</span><span class="p">.</span><span class="nx">k</span><span class="p">,</span> <span class="nx">bucketCnt</span><span class="o">*</span><span class="nb">uintptr</span><span class="p">(</span><span class="nx">t</span><span class="p">.</span><span class="nx">keysize</span><span class="p">))</span>
+		<span class="p">}</span>
+		
+    <span class="c1">// 循环当前需要搬迁的bmap及其溢出bmap
+</span><span class="c1"></span>		<span class="k">for</span> <span class="p">;</span> <span class="nx">b</span> <span class="o">!=</span> <span class="kc">nil</span><span class="p">;</span> <span class="nx">b</span> <span class="p">=</span> <span class="nx">b</span><span class="p">.</span><span class="nf">overflow</span><span class="p">(</span><span class="nx">t</span><span class="p">)</span> <span class="p">{</span>
+      <span class="c1">// 找到第一个key和对应的value的地址
+</span><span class="c1"></span>			<span class="nx">k</span> <span class="o">:=</span> <span class="nf">add</span><span class="p">(</span><span class="nx">unsafe</span><span class="p">.</span><span class="nf">Pointer</span><span class="p">(</span><span class="nx">b</span><span class="p">),</span> <span class="nx">dataOffset</span><span class="p">)</span>
+			<span class="nx">e</span> <span class="o">:=</span> <span class="nf">add</span><span class="p">(</span><span class="nx">k</span><span class="p">,</span> <span class="nx">bucketCnt</span><span class="o">*</span><span class="nb">uintptr</span><span class="p">(</span><span class="nx">t</span><span class="p">.</span><span class="nx">keysize</span><span class="p">))</span>
+      <span class="c1">// 遍历整个当前bmap的key和value
+</span><span class="c1"></span>			<span class="k">for</span> <span class="nx">i</span> <span class="o">:=</span> <span class="mi">0</span><span class="p">;</span> <span class="nx">i</span> <span class="p">&lt;</span> <span class="nx">bucketCnt</span><span class="p">;</span> <span class="nx">i</span><span class="p">,</span> <span class="nx">k</span><span class="p">,</span> <span class="nx">e</span> <span class="p">=</span> <span class="nx">i</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span> <span class="nf">add</span><span class="p">(</span><span class="nx">k</span><span class="p">,</span> <span class="nb">uintptr</span><span class="p">(</span><span class="nx">t</span><span class="p">.</span><span class="nx">keysize</span><span class="p">)),</span> <span class="nf">add</span><span class="p">(</span><span class="nx">e</span><span class="p">,</span> <span class="nb">uintptr</span><span class="p">(</span><span class="nx">t</span><span class="p">.</span><span class="nx">elemsize</span><span class="p">))</span> <span class="p">{</span>
+				<span class="c1">// 获取当前key value对应的tophash
+</span><span class="c1"></span>        <span class="nx">top</span> <span class="o">:=</span> <span class="nx">b</span><span class="p">.</span><span class="nx">tophash</span><span class="p">[</span><span class="nx">i</span><span class="p">]</span>
+        <span class="c1">// 如果是空
+</span><span class="c1"></span>				<span class="k">if</span> <span class="nf">isEmpty</span><span class="p">(</span><span class="nx">top</span><span class="p">)</span> <span class="p">{</span>
+          <span class="c1">// 做个标记 代表这个tophash已经搬走了
+</span><span class="c1"></span>					<span class="nx">b</span><span class="p">.</span><span class="nx">tophash</span><span class="p">[</span><span class="nx">i</span><span class="p">]</span> <span class="p">=</span> <span class="nx">evacuatedEmpty</span>
+					<span class="k">continue</span>
+				<span class="p">}</span>
+        <span class="c1">// 有问题
+</span><span class="c1"></span>				<span class="k">if</span> <span class="nx">top</span> <span class="p">&lt;</span> <span class="nx">minTopHash</span> <span class="p">{</span>
+					<span class="nf">throw</span><span class="p">(</span><span class="s">&#34;bad map state&#34;</span><span class="p">)</span>
+        <span class="p">}</span>
+				<span class="nx">k2</span> <span class="o">:=</span> <span class="nx">k</span>
+				<span class="k">if</span> <span class="nx">t</span><span class="p">.</span><span class="nf">indirectkey</span><span class="p">()</span> <span class="p">{</span>
+					<span class="nx">k2</span> <span class="p">=</span> <span class="o">*</span><span class="p">((</span><span class="o">*</span><span class="nx">unsafe</span><span class="p">.</span><span class="nx">Pointer</span><span class="p">)(</span><span class="nx">k2</span><span class="p">))</span>
+				<span class="p">}</span>
+				<span class="kd">var</span> <span class="nx">useY</span> <span class="kt">uint8</span>
+        <span class="c1">// 如果是翻倍扩容
+</span><span class="c1"></span>				<span class="k">if</span> <span class="p">!</span><span class="nx">h</span><span class="p">.</span><span class="nf">sameSizeGrow</span><span class="p">()</span> <span class="p">{</span>
+					<span class="c1">// 那么就需要重新计算当前这个key应该落到xy[0]还是xy[1]这两个新桶的哪个中去
+</span><span class="c1"></span>          <span class="c1">// 因为等量扩容是整理，桶的数量并没有增加，所以原来在哪还是在哪
+</span><span class="c1"></span>          <span class="c1">// 但是翻倍扩容则是增加了新的桶，就需要重新计算hash
+</span><span class="c1"></span>          <span class="c1">// 也就是说翻倍扩容可能导致当前key的哈希值和之后的不是同一个
+</span><span class="c1"></span>					<span class="nx">hash</span> <span class="o">:=</span> <span class="nx">t</span><span class="p">.</span><span class="nf">hasher</span><span class="p">(</span><span class="nx">k2</span><span class="p">,</span> <span class="nb">uintptr</span><span class="p">(</span><span class="nx">h</span><span class="p">.</span><span class="nx">hash0</span><span class="p">))</span>
+          <span class="c1">// 这个是计算到底该把当前的key-value 放到xy[0]还是xy[1]
+</span><span class="c1"></span>					<span class="k">if</span> <span class="nx">h</span><span class="p">.</span><span class="nx">flags</span><span class="o">&amp;</span><span class="nx">iterator</span> <span class="o">!=</span> <span class="mi">0</span> <span class="o">&amp;&amp;</span> <span class="p">!</span><span class="nx">t</span><span class="p">.</span><span class="nf">reflexivekey</span><span class="p">()</span> <span class="o">&amp;&amp;</span> <span class="p">!</span><span class="nx">t</span><span class="p">.</span><span class="nx">key</span><span class="p">.</span><span class="nf">equal</span><span class="p">(</span><span class="nx">k2</span><span class="p">,</span> <span class="nx">k2</span><span class="p">)</span> <span class="p">{</span>
+						<span class="nx">useY</span> <span class="p">=</span> <span class="nx">top</span> <span class="o">&amp;</span> <span class="mi">1</span>
+						<span class="nx">top</span> <span class="p">=</span> <span class="nf">tophash</span><span class="p">(</span><span class="nx">hash</span><span class="p">)</span>
+					<span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+						<span class="k">if</span> <span class="nx">hash</span><span class="o">&amp;</span><span class="nx">newbit</span> <span class="o">!=</span> <span class="mi">0</span> <span class="p">{</span>
+							<span class="nx">useY</span> <span class="p">=</span> <span class="mi">1</span>
+						<span class="p">}</span>
+					<span class="p">}</span>
+				<span class="p">}</span>
+
+				<span class="k">if</span> <span class="nx">evacuatedX</span><span class="o">+</span><span class="mi">1</span> <span class="o">!=</span> <span class="nx">evacuatedY</span> <span class="o">||</span> <span class="nx">evacuatedX</span><span class="p">^</span><span class="mi">1</span> <span class="o">!=</span> <span class="nx">evacuatedY</span> <span class="p">{</span>
+					<span class="nf">throw</span><span class="p">(</span><span class="s">&#34;bad evacuatedN&#34;</span><span class="p">)</span>
+				<span class="p">}</span>
+				<span class="c1">// 开始
+</span><span class="c1"></span>				<span class="nx">b</span><span class="p">.</span><span class="nx">tophash</span><span class="p">[</span><span class="nx">i</span><span class="p">]</span> <span class="p">=</span> <span class="nx">evacuatedX</span> <span class="o">+</span> <span class="nx">useY</span>  
+				<span class="nx">dst</span> <span class="o">:=</span> <span class="o">&amp;</span><span class="nx">xy</span><span class="p">[</span><span class="nx">useY</span><span class="p">]</span>                 
+				
+				<span class="k">if</span> <span class="nx">dst</span><span class="p">.</span><span class="nx">i</span> <span class="o">==</span> <span class="nx">bucketCnt</span> <span class="p">{</span>
+					<span class="nx">dst</span><span class="p">.</span><span class="nx">b</span> <span class="p">=</span> <span class="nx">h</span><span class="p">.</span><span class="nf">newoverflow</span><span class="p">(</span><span class="nx">t</span><span class="p">,</span> <span class="nx">dst</span><span class="p">.</span><span class="nx">b</span><span class="p">)</span>
+					<span class="nx">dst</span><span class="p">.</span><span class="nx">i</span> <span class="p">=</span> <span class="mi">0</span>
+					<span class="nx">dst</span><span class="p">.</span><span class="nx">k</span> <span class="p">=</span> <span class="nf">add</span><span class="p">(</span><span class="nx">unsafe</span><span class="p">.</span><span class="nf">Pointer</span><span class="p">(</span><span class="nx">dst</span><span class="p">.</span><span class="nx">b</span><span class="p">),</span> <span class="nx">dataOffset</span><span class="p">)</span>
+					<span class="nx">dst</span><span class="p">.</span><span class="nx">e</span> <span class="p">=</span> <span class="nf">add</span><span class="p">(</span><span class="nx">dst</span><span class="p">.</span><span class="nx">k</span><span class="p">,</span> <span class="nx">bucketCnt</span><span class="o">*</span><span class="nb">uintptr</span><span class="p">(</span><span class="nx">t</span><span class="p">.</span><span class="nx">keysize</span><span class="p">))</span>
+				<span class="p">}</span>
+				<span class="nx">dst</span><span class="p">.</span><span class="nx">b</span><span class="p">.</span><span class="nx">tophash</span><span class="p">[</span><span class="nx">dst</span><span class="p">.</span><span class="nx">i</span><span class="o">&amp;</span><span class="p">(</span><span class="nx">bucketCnt</span><span class="o">-</span><span class="mi">1</span><span class="p">)]</span> <span class="p">=</span> <span class="nx">top</span>  
+				<span class="k">if</span> <span class="nx">t</span><span class="p">.</span><span class="nf">indirectkey</span><span class="p">()</span> <span class="p">{</span>
+					<span class="o">*</span><span class="p">(</span><span class="o">*</span><span class="nx">unsafe</span><span class="p">.</span><span class="nx">Pointer</span><span class="p">)(</span><span class="nx">dst</span><span class="p">.</span><span class="nx">k</span><span class="p">)</span> <span class="p">=</span> <span class="nx">k2</span> 
+				<span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+					<span class="nf">typedmemmove</span><span class="p">(</span><span class="nx">t</span><span class="p">.</span><span class="nx">key</span><span class="p">,</span> <span class="nx">dst</span><span class="p">.</span><span class="nx">k</span><span class="p">,</span> <span class="nx">k</span><span class="p">)</span>  
+				<span class="p">}</span>
+				<span class="k">if</span> <span class="nx">t</span><span class="p">.</span><span class="nf">indirectelem</span><span class="p">()</span> <span class="p">{</span>
+					<span class="o">*</span><span class="p">(</span><span class="o">*</span><span class="nx">unsafe</span><span class="p">.</span><span class="nx">Pointer</span><span class="p">)(</span><span class="nx">dst</span><span class="p">.</span><span class="nx">e</span><span class="p">)</span> <span class="p">=</span> <span class="o">*</span><span class="p">(</span><span class="o">*</span><span class="nx">unsafe</span><span class="p">.</span><span class="nx">Pointer</span><span class="p">)(</span><span class="nx">e</span><span class="p">)</span>
+				<span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+					<span class="nf">typedmemmove</span><span class="p">(</span><span class="nx">t</span><span class="p">.</span><span class="nx">elem</span><span class="p">,</span> <span class="nx">dst</span><span class="p">.</span><span class="nx">e</span><span class="p">,</span> <span class="nx">e</span><span class="p">)</span>
+        <span class="p">}</span>
+				<span class="nx">dst</span><span class="p">.</span><span class="nx">i</span><span class="o">++</span>
+				<span class="nx">dst</span><span class="p">.</span><span class="nx">k</span> <span class="p">=</span> <span class="nf">add</span><span class="p">(</span><span class="nx">dst</span><span class="p">.</span><span class="nx">k</span><span class="p">,</span> <span class="nb">uintptr</span><span class="p">(</span><span class="nx">t</span><span class="p">.</span><span class="nx">keysize</span><span class="p">))</span>
+				<span class="nx">dst</span><span class="p">.</span><span class="nx">e</span> <span class="p">=</span> <span class="nf">add</span><span class="p">(</span><span class="nx">dst</span><span class="p">.</span><span class="nx">e</span><span class="p">,</span> <span class="nb">uintptr</span><span class="p">(</span><span class="nx">t</span><span class="p">.</span><span class="nx">elemsize</span><span class="p">))</span>
+        <span class="c1">// 结束
+</span><span class="c1"></span>        <span class="c1">// 从开始到结束这一块的代码大概意思就是找到搬到的目标是xy[0]还是xy[1]
+</span><span class="c1"></span>        <span class="c1">// 如果是等量扩容则默认放到xy[0]桶里
+</span><span class="c1"></span>        <span class="c1">// 然后如果不是等量扩容，可能会重新计算该key的tophash的值
+</span><span class="c1"></span>        <span class="c1">// 然后把key value，和tophash 复制到xy[0]或xy[1]的对应位置
+</span><span class="c1"></span>        <span class="c1">// 然后继续循环直到整个bmap及其溢出bmap被搬迁完
+</span><span class="c1"></span>			<span class="p">}</span>
+		<span class="p">}</span>
+    <span class="c1">// 把搬完了的旧桶做一些标记以便等待gc清除
+</span><span class="c1"></span>		<span class="k">if</span> <span class="nx">h</span><span class="p">.</span><span class="nx">flags</span><span class="o">&amp;</span><span class="nx">oldIterator</span> <span class="o">==</span> <span class="mi">0</span> <span class="o">&amp;&amp;</span> <span class="nx">t</span><span class="p">.</span><span class="nx">bucket</span><span class="p">.</span><span class="nx">ptrdata</span> <span class="o">!=</span> <span class="mi">0</span> <span class="p">{</span>
+			<span class="nx">b</span> <span class="o">:=</span> <span class="nf">add</span><span class="p">(</span><span class="nx">h</span><span class="p">.</span><span class="nx">oldbuckets</span><span class="p">,</span> <span class="nx">oldbucket</span><span class="o">*</span><span class="nb">uintptr</span><span class="p">(</span><span class="nx">t</span><span class="p">.</span><span class="nx">bucketsize</span><span class="p">))</span>
+			<span class="nx">ptr</span> <span class="o">:=</span> <span class="nf">add</span><span class="p">(</span><span class="nx">b</span><span class="p">,</span> <span class="nx">dataOffset</span><span class="p">)</span>
+			<span class="nx">n</span> <span class="o">:=</span> <span class="nb">uintptr</span><span class="p">(</span><span class="nx">t</span><span class="p">.</span><span class="nx">bucketsize</span><span class="p">)</span> <span class="o">-</span> <span class="nx">dataOffset</span>
+			<span class="nf">memclrHasPointers</span><span class="p">(</span><span class="nx">ptr</span><span class="p">,</span> <span class="nx">n</span><span class="p">)</span>
+		<span class="p">}</span>
+	<span class="p">}</span>
+  <span class="c1">// 如果此次搬迁是按照 h.nevacuate的搬迁则
+</span><span class="c1"></span>	<span class="c1">// 做个标记，代表下一次要搬迁的桶是哪个
+</span><span class="c1"></span>	<span class="k">if</span> <span class="nx">oldbucket</span> <span class="o">==</span> <span class="nx">h</span><span class="p">.</span><span class="nx">nevacuate</span> <span class="p">{</span>
+		<span class="nf">advanceEvacuationMark</span><span class="p">(</span><span class="nx">h</span><span class="p">,</span> <span class="nx">t</span><span class="p">,</span> <span class="nx">newbit</span><span class="p">)</span>
+	<span class="p">}</span>
+<span class="p">}</span>
+
+</code></pre></div><h6 id="map扩容过程的总结">Map扩容过程的总结</h6>
+<ol>
+<li>当装载因子&gt;=6.5或者溢出bmap过多时，会产生扩容</li>
+<li>如果是装载因子&gt;=6.5的扩容则为翻倍扩容，创建一个比当前桶个数*2的桶列表，如果溢出桶过多但装载因子&lt;6.5时为等量扩容，即把当前稀疏的桶内元素进行整理，使其没有那么多的溢出桶。</li>
+<li>然后会把当前的桶放到hmap.oldbuckets字段作为旧桶，然后把当前的溢出桶（如果有）也放到hmap.extra.oldoverflow作为旧的溢出桶。</li>
+<li>在扩容时不会触发搬迁操作，搬迁操作只会在写入/删除操作时被触发。</li>
+<li>搬迁操作过程：
+<ol>
+<li>翻倍扩容搬迁过程：
+<ol>
+<li>找到当前key的hash对应的旧桶然后算出对应的新桶保存其上下文xy[0]，再找到一个根据当前新桶+旧桶数量偏移的哪个桶xy[1]，也保存其上下文。比如当前key的哈希对应的旧桶是3号，那么xy[0]也是新桶的3号桶，然后xy[1]的桶号就为3+旧桶的个数、比如7号。</li>
+<li>由于翻倍扩容时当前旧桶对应两个新桶，所以需要针对当前旧桶中的key做重新hash，选择一个目标桶出来，即当前key处于3号桶，经过重新哈希后可能放到了7号桶，找到目标桶后，将对应的key，value，tophash复制过去，完成一个key-value的搬迁。然后循环此过程。</li>
+</ol>
+</li>
+<li>等量扩容搬迁过程：
+<ol>
+<li>与翻倍扩容相同，但只保存一个新桶的上下文，因为等量扩容没有创建更多的桶，扩容是对应的关系，即当前的key处于3号桶，搬迁后也属于3号桶。</li>
+<li>剩余过程与翻倍扩容相同。</li>
+</ol>
+</li>
+<li>搬迁完毕后，将旧桶做一些标记以便可以gc清除，然后如果此次搬迁是按照顺序搬迁，即 h.nevacuate记录的桶搬迁的，则更新 h.nevacuate到下次应该搬迁的桶上。</li>
+</ol>
+</li>
+</ol>
+<h5 id="map的删除解析">Map的删除解析</h5>
+<p>接下来来解析一下关于Map的删除，首先还是根据上面的代码去输出汇编代码看看删除的时候到底发生了什么？</p>
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go">        <span class="mh">0x0108</span> <span class="mo">00264</span>   <span class="nx">CALL</span>    <span class="nx">runtime</span><span class="p">.</span><span class="nf">mapdelete_fast64</span><span class="p">(</span><span class="nx">SB</span><span class="p">)</span>
+
+</code></pre></div><p>上述汇编代码看出，再向Map中删除数据的时候调用了runtime.mapdelete_fast64()函数，但是作者并没有在runtime.map.go文件中找到相对应的函数，根据网上其他一些文章得知，最终的写入时的函数调用都会调用到runtime.mapdelete()中，那么，接下来我们就开始讲一下关于runtime.mapdelete()函数的一些逻辑的代码解析：</p>
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go">
+<span class="kd">func</span> <span class="nf">mapdelete</span><span class="p">(</span><span class="nx">t</span> <span class="o">*</span><span class="nx">maptype</span><span class="p">,</span> <span class="nx">h</span> <span class="o">*</span><span class="nx">hmap</span><span class="p">,</span> <span class="nx">key</span> <span class="nx">unsafe</span><span class="p">.</span><span class="nx">Pointer</span><span class="p">)</span> <span class="p">{</span>
+	 <span class="c1">// 如果map是nil或者没有元素则直接返回
+</span><span class="c1"></span>	<span class="k">if</span> <span class="nx">h</span> <span class="o">==</span> <span class="kc">nil</span> <span class="o">||</span> <span class="nx">h</span><span class="p">.</span><span class="nx">count</span> <span class="o">==</span> <span class="mi">0</span> <span class="p">{</span>
+    <span class="c1">// 好像是针对类型的错误校验
+</span><span class="c1"></span>    <span class="c1">// 具体可以看issue 23734
+</span><span class="c1"></span>		<span class="k">if</span> <span class="nx">t</span><span class="p">.</span><span class="nf">hashMightPanic</span><span class="p">()</span> <span class="p">{</span>
+			<span class="nx">t</span><span class="p">.</span><span class="nf">hasher</span><span class="p">(</span><span class="nx">key</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>  
+		<span class="p">}</span>
+		<span class="k">return</span>
+	<span class="p">}</span>
+  <span class="c1">// 不能并发写！
+</span><span class="c1"></span>	<span class="k">if</span> <span class="nx">h</span><span class="p">.</span><span class="nx">flags</span><span class="o">&amp;</span><span class="nx">hashWriting</span> <span class="o">!=</span> <span class="mi">0</span> <span class="p">{</span>
+		<span class="nf">throw</span><span class="p">(</span><span class="s">&#34;concurrent map writes&#34;</span><span class="p">)</span>
+	<span class="p">}</span>
+	<span class="c1">// 算出key的对应的hash
+</span><span class="c1"></span>	<span class="nx">hash</span> <span class="o">:=</span> <span class="nx">t</span><span class="p">.</span><span class="nf">hasher</span><span class="p">(</span><span class="nx">key</span><span class="p">,</span> <span class="nb">uintptr</span><span class="p">(</span><span class="nx">h</span><span class="p">.</span><span class="nx">hash0</span><span class="p">))</span>
+
+	<span class="c1">// 做写标记
+</span><span class="c1"></span>	<span class="nx">h</span><span class="p">.</span><span class="nx">flags</span> <span class="p">^=</span> <span class="nx">hashWriting</span>
+	<span class="c1">// 选 桶
+</span><span class="c1"></span>	<span class="nx">bucket</span> <span class="o">:=</span> <span class="nx">hash</span> <span class="o">&amp;</span> <span class="nf">bucketMask</span><span class="p">(</span><span class="nx">h</span><span class="p">.</span><span class="nx">B</span><span class="p">)</span>
+  <span class="c1">// 如果正在进行扩容
+</span><span class="c1"></span>  <span class="c1">// 那就进行搬迁
+</span><span class="c1"></span>	<span class="k">if</span> <span class="nx">h</span><span class="p">.</span><span class="nf">growing</span><span class="p">()</span> <span class="p">{</span>
+		<span class="nf">growWork</span><span class="p">(</span><span class="nx">t</span><span class="p">,</span> <span class="nx">h</span><span class="p">,</span> <span class="nx">bucket</span><span class="p">)</span>
+	<span class="p">}</span>
+  <span class="c1">// 找到那个bmap
+</span><span class="c1"></span>	<span class="nx">b</span> <span class="o">:=</span> <span class="p">(</span><span class="o">*</span><span class="nx">bmap</span><span class="p">)(</span><span class="nf">add</span><span class="p">(</span><span class="nx">h</span><span class="p">.</span><span class="nx">buckets</span><span class="p">,</span> <span class="nx">bucket</span><span class="o">*</span><span class="nb">uintptr</span><span class="p">(</span><span class="nx">t</span><span class="p">.</span><span class="nx">bucketsize</span><span class="p">)))</span>
+	<span class="nx">bOrig</span> <span class="o">:=</span> <span class="nx">b</span>
+  <span class="c1">// 算出tophash
+</span><span class="c1"></span>	<span class="nx">top</span> <span class="o">:=</span> <span class="nf">tophash</span><span class="p">(</span><span class="nx">hash</span><span class="p">)</span>
+<span class="nx">search</span><span class="p">:</span>
+  <span class="c1">// 循环遍历选中的那个桶及其溢出桶
+</span><span class="c1"></span>	<span class="k">for</span> <span class="p">;</span> <span class="nx">b</span> <span class="o">!=</span> <span class="kc">nil</span><span class="p">;</span> <span class="nx">b</span> <span class="p">=</span> <span class="nx">b</span><span class="p">.</span><span class="nf">overflow</span><span class="p">(</span><span class="nx">t</span><span class="p">)</span> <span class="p">{</span>
+    <span class="c1">// 遍历每个溢出桶的tophash进行快速比对
+</span><span class="c1"></span>		<span class="k">for</span> <span class="nx">i</span> <span class="o">:=</span> <span class="nb">uintptr</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span> <span class="nx">i</span> <span class="p">&lt;</span> <span class="nx">bucketCnt</span><span class="p">;</span> <span class="nx">i</span><span class="o">++</span> <span class="p">{</span>
+			<span class="k">if</span> <span class="nx">b</span><span class="p">.</span><span class="nx">tophash</span><span class="p">[</span><span class="nx">i</span><span class="p">]</span> <span class="o">!=</span> <span class="nx">top</span> <span class="p">{</span>
+          <span class="c1">// 如果 b.tophash[i] == emptyRest 
+</span><span class="c1"></span>        <span class="c1">// 代表后续的b.tophash没有 溢出bmap或者可遍历的b.tophash了
+</span><span class="c1"></span>				<span class="k">if</span> <span class="nx">b</span><span class="p">.</span><span class="nx">tophash</span><span class="p">[</span><span class="nx">i</span><span class="p">]</span> <span class="o">==</span> <span class="nx">emptyRest</span> <span class="p">{</span>
+					<span class="k">break</span> <span class="nx">search</span>
+				<span class="p">}</span>
+				<span class="k">continue</span>
+			<span class="p">}</span>
+      <span class="c1">// 有相等的tophash
+</span><span class="c1"></span>      <span class="c1">// 就算出对应k的位置
+</span><span class="c1"></span>			<span class="nx">k</span> <span class="o">:=</span> <span class="nf">add</span><span class="p">(</span><span class="nx">unsafe</span><span class="p">.</span><span class="nf">Pointer</span><span class="p">(</span><span class="nx">b</span><span class="p">),</span> <span class="nx">dataOffset</span><span class="o">+</span><span class="nx">i</span><span class="o">*</span><span class="nb">uintptr</span><span class="p">(</span><span class="nx">t</span><span class="p">.</span><span class="nx">keysize</span><span class="p">))</span>
+			<span class="nx">k2</span> <span class="o">:=</span> <span class="nx">k</span>
+			<span class="k">if</span> <span class="nx">t</span><span class="p">.</span><span class="nf">indirectkey</span><span class="p">()</span> <span class="p">{</span>
+				<span class="nx">k2</span> <span class="p">=</span> <span class="o">*</span><span class="p">((</span><span class="o">*</span><span class="nx">unsafe</span><span class="p">.</span><span class="nx">Pointer</span><span class="p">)(</span><span class="nx">k2</span><span class="p">))</span>
+			<span class="p">}</span>
+      <span class="c1">// 比对key和要删除的key是否相等
+</span><span class="c1"></span>			<span class="k">if</span> <span class="p">!</span><span class="nx">t</span><span class="p">.</span><span class="nx">key</span><span class="p">.</span><span class="nf">equal</span><span class="p">(</span><span class="nx">key</span><span class="p">,</span> <span class="nx">k2</span><span class="p">)</span> <span class="p">{</span>
+				<span class="k">continue</span>
+			<span class="p">}</span>
+ 			<span class="c1">// 如果key是个指针 进行清空操作
+</span><span class="c1"></span>      <span class="k">if</span> <span class="nx">t</span><span class="p">.</span><span class="nf">indirectkey</span><span class="p">()</span> <span class="p">{</span>
+				<span class="o">*</span><span class="p">(</span><span class="o">*</span><span class="nx">unsafe</span><span class="p">.</span><span class="nx">Pointer</span><span class="p">)(</span><span class="nx">k</span><span class="p">)</span> <span class="p">=</span> <span class="kc">nil</span>
+			<span class="p">}</span> <span class="k">else</span> <span class="k">if</span> <span class="nx">t</span><span class="p">.</span><span class="nx">key</span><span class="p">.</span><span class="nx">ptrdata</span> <span class="o">!=</span> <span class="mi">0</span> <span class="p">{</span>
+				<span class="nf">memclrHasPointers</span><span class="p">(</span><span class="nx">k</span><span class="p">,</span> <span class="nx">t</span><span class="p">.</span><span class="nx">key</span><span class="p">.</span><span class="nx">size</span><span class="p">)</span>
+			<span class="p">}</span>
+      <span class="c1">// 算出key对应的value的地址
+</span><span class="c1"></span>			<span class="nx">e</span> <span class="o">:=</span> <span class="nf">add</span><span class="p">(</span><span class="nx">unsafe</span><span class="p">.</span><span class="nf">Pointer</span><span class="p">(</span><span class="nx">b</span><span class="p">),</span> <span class="nx">dataOffset</span><span class="o">+</span><span class="nx">bucketCnt</span><span class="o">*</span><span class="nb">uintptr</span><span class="p">(</span><span class="nx">t</span><span class="p">.</span><span class="nx">keysize</span><span class="p">)</span><span class="o">+</span><span class="nx">i</span><span class="o">*</span><span class="nb">uintptr</span><span class="p">(</span><span class="nx">t</span><span class="p">.</span><span class="nx">elemsize</span><span class="p">))</span>
+      <span class="c1">// 跟key一样如果是指针就清空它
+</span><span class="c1"></span>			<span class="k">if</span> <span class="nx">t</span><span class="p">.</span><span class="nf">indirectelem</span><span class="p">()</span> <span class="p">{</span>
+				<span class="o">*</span><span class="p">(</span><span class="o">*</span><span class="nx">unsafe</span><span class="p">.</span><span class="nx">Pointer</span><span class="p">)(</span><span class="nx">e</span><span class="p">)</span> <span class="p">=</span> <span class="kc">nil</span>
+			<span class="p">}</span> <span class="k">else</span> <span class="k">if</span> <span class="nx">t</span><span class="p">.</span><span class="nx">elem</span><span class="p">.</span><span class="nx">ptrdata</span> <span class="o">!=</span> <span class="mi">0</span> <span class="p">{</span>
+				<span class="nf">memclrHasPointers</span><span class="p">(</span><span class="nx">e</span><span class="p">,</span> <span class="nx">t</span><span class="p">.</span><span class="nx">elem</span><span class="p">.</span><span class="nx">size</span><span class="p">)</span>
+			<span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+				<span class="nf">memclrNoHeapPointers</span><span class="p">(</span><span class="nx">e</span><span class="p">,</span> <span class="nx">t</span><span class="p">.</span><span class="nx">elem</span><span class="p">.</span><span class="nx">size</span><span class="p">)</span>
+			<span class="p">}</span>
+      <span class="c1">// 标记这个tophash 是一个空的
+</span><span class="c1"></span>			<span class="nx">b</span><span class="p">.</span><span class="nx">tophash</span><span class="p">[</span><span class="nx">i</span><span class="p">]</span> <span class="p">=</span> <span class="nx">emptyOne</span>
+			<span class="c1">// 开始
+</span><span class="c1"></span>      <span class="k">if</span> <span class="nx">i</span> <span class="o">==</span> <span class="nx">bucketCnt</span><span class="o">-</span><span class="mi">1</span> <span class="p">{</span>
+				<span class="k">if</span> <span class="nx">b</span><span class="p">.</span><span class="nf">overflow</span><span class="p">(</span><span class="nx">t</span><span class="p">)</span> <span class="o">!=</span> <span class="kc">nil</span> <span class="o">&amp;&amp;</span> <span class="nx">b</span><span class="p">.</span><span class="nf">overflow</span><span class="p">(</span><span class="nx">t</span><span class="p">).</span><span class="nx">tophash</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">!=</span> <span class="nx">emptyRest</span> <span class="p">{</span>
+					<span class="k">goto</span> <span class="nx">notLast</span>
+				<span class="p">}</span>
+			<span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+				<span class="k">if</span> <span class="nx">b</span><span class="p">.</span><span class="nx">tophash</span><span class="p">[</span><span class="nx">i</span><span class="o">+</span><span class="mi">1</span><span class="p">]</span> <span class="o">!=</span> <span class="nx">emptyRest</span> <span class="p">{</span>
+					<span class="k">goto</span> <span class="nx">notLast</span>
+				<span class="p">}</span>
+			<span class="p">}</span>
+			<span class="k">for</span> <span class="p">{</span>
+				<span class="nx">b</span><span class="p">.</span><span class="nx">tophash</span><span class="p">[</span><span class="nx">i</span><span class="p">]</span> <span class="p">=</span> <span class="nx">emptyRest</span>
+				<span class="k">if</span> <span class="nx">i</span> <span class="o">==</span> <span class="mi">0</span> <span class="p">{</span>
+					<span class="k">if</span> <span class="nx">b</span> <span class="o">==</span> <span class="nx">bOrig</span> <span class="p">{</span>
+						<span class="k">break</span>  
+					<span class="p">}</span>
+					<span class="nx">c</span> <span class="o">:=</span> <span class="nx">b</span>
+					<span class="k">for</span> <span class="nx">b</span> <span class="p">=</span> <span class="nx">bOrig</span><span class="p">;</span> <span class="nx">b</span><span class="p">.</span><span class="nf">overflow</span><span class="p">(</span><span class="nx">t</span><span class="p">)</span> <span class="o">!=</span> <span class="nx">c</span><span class="p">;</span> <span class="nx">b</span> <span class="p">=</span> <span class="nx">b</span><span class="p">.</span><span class="nf">overflow</span><span class="p">(</span><span class="nx">t</span><span class="p">)</span> <span class="p">{</span>
+					<span class="p">}</span>
+					<span class="nx">i</span> <span class="p">=</span> <span class="nx">bucketCnt</span> <span class="o">-</span> <span class="mi">1</span>
+				<span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+					<span class="nx">i</span><span class="o">--</span>
+				<span class="p">}</span>
+				<span class="k">if</span> <span class="nx">b</span><span class="p">.</span><span class="nx">tophash</span><span class="p">[</span><span class="nx">i</span><span class="p">]</span> <span class="o">!=</span> <span class="nx">emptyOne</span> <span class="p">{</span>
+					<span class="k">break</span>
+				<span class="p">}</span>
+			<span class="p">}</span>
+      <span class="c1">// 结束 
+</span><span class="c1"></span>      <span class="c1">// 从开始到结束的意义是
+</span><span class="c1"></span>      <span class="c1">// 如果当前桶现在以一堆 emptyOne 状态结束，就把这些状态改为 emptyRest 状态。
+</span><span class="c1"></span>		<span class="nx">notLast</span><span class="p">:</span>
+      <span class="c1">// 当前元素数量-1
+</span><span class="c1"></span>			<span class="nx">h</span><span class="p">.</span><span class="nx">count</span><span class="o">--</span>
+			<span class="k">break</span> <span class="nx">search</span>
+		<span class="p">}</span>
+	<span class="p">}</span>
+	<span class="c1">// 再次校验是否并发写
+</span><span class="c1"></span>	<span class="k">if</span> <span class="nx">h</span><span class="p">.</span><span class="nx">flags</span><span class="o">&amp;</span><span class="nx">hashWriting</span> <span class="o">==</span> <span class="mi">0</span> <span class="p">{</span>
+		<span class="nf">throw</span><span class="p">(</span><span class="s">&#34;concurrent map writes&#34;</span><span class="p">)</span>
+	<span class="p">}</span>
+  <span class="c1">// 取消写标记
+</span><span class="c1"></span>	<span class="nx">h</span><span class="p">.</span><span class="nx">flags</span> <span class="o">&amp;^=</span> <span class="nx">hashWriting</span>
+<span class="p">}</span>
+</code></pre></div><h6 id="map删除过程的总结">Map删除过程的总结</h6>
+<p>总的来说删除过程和写入过程没啥区别，只是触发哈希的删除需要使用关键字不同，如果在删除期间遇到了哈希表的扩容，就会分流桶中的元素，分流结束之后会找到桶中的目标元素完成键值对的删除工作。</p>
+<h4 id="map的读取">Map的读取</h4>
+<p>说完了写入和删除操作，接下来该说一下Map的读取操作了，读取操作再Go中分为三种形式，接下来看一下代码示例：</p>
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go"><span class="kd">func</span> <span class="nf">main</span><span class="p">()</span> <span class="p">{</span>
+	<span class="nx">m</span> <span class="o">:=</span> <span class="kd">map</span><span class="p">[</span><span class="kt">int</span><span class="p">]</span><span class="kt">int</span><span class="p">{</span>
+		<span class="mi">1</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
+		<span class="mi">2</span><span class="p">:</span> <span class="mi">2</span><span class="p">,</span>
+		<span class="mi">3</span><span class="p">:</span> <span class="mi">3</span><span class="p">,</span>
+	<span class="p">}</span>
+
+	<span class="nx">value</span> <span class="o">:=</span> <span class="nx">m</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+	<span class="nx">value</span><span class="p">,</span> <span class="nx">ok</span> <span class="o">:=</span> <span class="nx">m</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span>
+	<span class="k">for</span> <span class="nx">key</span><span class="p">,</span> <span class="nx">value</span> <span class="o">:=</span> <span class="k">range</span> <span class="nx">m</span> <span class="p">{</span>
+		<span class="nx">fmt</span><span class="p">.</span><span class="nf">Println</span><span class="p">(</span><span class="nx">key</span><span class="p">,</span> <span class="nx">value</span><span class="p">)</span>
+	<span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div><p>首先初始化了一个哈希表m，然后对其进行读取值，我们先来看看前两种，因为其实际的代码都差不多，首先第二个是返回了两个值，第二个值（即ok）代表当没有找到这个key的时候返回false，否则返回true。</p>
+<p>接下来看一下这两种形式在汇编上有什么区别：</p>
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go">        <span class="mh">0x01e0</span> <span class="mo">004</span><span class="mi">80</span>      <span class="nx">CALL</span>    <span class="nx">runtime</span><span class="p">.</span><span class="nf">mapaccess1_fast64</span><span class="p">(</span><span class="nx">SB</span><span class="p">)</span>
+        <span class="mh">0x0213</span> <span class="mo">00531</span>      <span class="nx">CALL</span>    <span class="nx">runtime</span><span class="p">.</span><span class="nf">mapaccess2_fast64</span><span class="p">(</span><span class="nx">SB</span><span class="p">)</span>
+</code></pre></div><p>上面的汇编依旧不同，但是区别也很小，一个是runtime.mapaccess1另一个是runtime.mapaccess2，有啥区别呢？在源代码里发现，这两个函数的代码实现没有区别，区别在于runtime.mapaccess2多返回了一个bool值用于标记是否查询到了数据，那么接下来我们就对runtime.mapaccess2就行代码解析：</p>
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go"><span class="kd">func</span> <span class="nf">mapaccess2</span><span class="p">(</span><span class="nx">t</span> <span class="o">*</span><span class="nx">maptype</span><span class="p">,</span> <span class="nx">h</span> <span class="o">*</span><span class="nx">hmap</span><span class="p">,</span> <span class="nx">key</span> <span class="nx">unsafe</span><span class="p">.</span><span class="nx">Pointer</span><span class="p">)</span> <span class="p">(</span><span class="nx">unsafe</span><span class="p">.</span><span class="nx">Pointer</span><span class="p">,</span> <span class="kt">bool</span><span class="p">)</span> <span class="p">{</span>
+	 <span class="c1">// 如果map是nil或者没有元素则
+</span><span class="c1"></span>  <span class="c1">// 返回对应类型的零值和false
+</span><span class="c1"></span>	<span class="k">if</span> <span class="nx">h</span> <span class="o">==</span> <span class="kc">nil</span> <span class="o">||</span> <span class="nx">h</span><span class="p">.</span><span class="nx">count</span> <span class="o">==</span> <span class="mi">0</span> <span class="p">{</span>
+    <span class="c1">// 同写入
+</span><span class="c1"></span>		<span class="k">if</span> <span class="nx">t</span><span class="p">.</span><span class="nf">hashMightPanic</span><span class="p">()</span> <span class="p">{</span>
+			<span class="nx">t</span><span class="p">.</span><span class="nf">hasher</span><span class="p">(</span><span class="nx">key</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> 
+		<span class="p">}</span>
+ 		<span class="k">return</span> <span class="nx">unsafe</span><span class="p">.</span><span class="nf">Pointer</span><span class="p">(</span><span class="o">&amp;</span><span class="nx">zeroVal</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span> <span class="kc">false</span>
+	<span class="p">}</span>
+  <span class="c1">// 检查是否有正在写入
+</span><span class="c1"></span>  <span class="c1">// 不能并发写
+</span><span class="c1"></span>	<span class="k">if</span> <span class="nx">h</span><span class="p">.</span><span class="nx">flags</span><span class="o">&amp;</span><span class="nx">hashWriting</span> <span class="o">!=</span> <span class="mi">0</span> <span class="p">{</span>
+		<span class="nf">throw</span><span class="p">(</span><span class="s">&#34;concurrent map read and map write&#34;</span><span class="p">)</span>
+	<span class="p">}</span>
+  <span class="c1">// 算出哈希
+</span><span class="c1"></span>	<span class="nx">hash</span> <span class="o">:=</span> <span class="nx">t</span><span class="p">.</span><span class="nf">hasher</span><span class="p">(</span><span class="nx">key</span><span class="p">,</span> <span class="nb">uintptr</span><span class="p">(</span><span class="nx">h</span><span class="p">.</span><span class="nx">hash0</span><span class="p">))</span>
+	<span class="nx">m</span> <span class="o">:=</span> <span class="nf">bucketMask</span><span class="p">(</span><span class="nx">h</span><span class="p">.</span><span class="nx">B</span><span class="p">)</span>
+  <span class="c1">// 找到哈希的低B位的对应的桶
+</span><span class="c1"></span>	<span class="nx">b</span> <span class="o">:=</span> <span class="p">(</span><span class="o">*</span><span class="nx">bmap</span><span class="p">)(</span><span class="nx">unsafe</span><span class="p">.</span><span class="nf">Pointer</span><span class="p">(</span><span class="nb">uintptr</span><span class="p">(</span><span class="nx">h</span><span class="p">.</span><span class="nx">buckets</span><span class="p">)</span> <span class="o">+</span> <span class="p">(</span><span class="nx">hash</span><span class="o">&amp;</span><span class="nx">m</span><span class="p">)</span><span class="o">*</span><span class="nb">uintptr</span><span class="p">(</span><span class="nx">t</span><span class="p">.</span><span class="nx">bucketsize</span><span class="p">)))</span>
+  <span class="c1">// 如果此时处于扩容状态
+</span><span class="c1"></span>	<span class="k">if</span> <span class="nx">c</span> <span class="o">:=</span> <span class="nx">h</span><span class="p">.</span><span class="nx">oldbuckets</span><span class="p">;</span> <span class="nx">c</span> <span class="o">!=</span> <span class="kc">nil</span> <span class="p">{</span>
+    <span class="c1">// 那么就去旧桶找
+</span><span class="c1"></span>    <span class="c1">// 如果此时是翻倍扩容
+</span><span class="c1"></span>		<span class="k">if</span> <span class="p">!</span><span class="nx">h</span><span class="p">.</span><span class="nf">sameSizeGrow</span><span class="p">()</span> <span class="p">{</span>
+      <span class="c1">// 因为旧桶是当前桶的一半所以需要把当前的桶/2
+</span><span class="c1"></span>			<span class="nx">m</span> <span class="o">&gt;&gt;=</span> <span class="mi">1</span>
+		<span class="p">}</span>
+    <span class="c1">// 找到在旧桶里面对应的那个桶
+</span><span class="c1"></span>		<span class="nx">oldb</span> <span class="o">:=</span> <span class="p">(</span><span class="o">*</span><span class="nx">bmap</span><span class="p">)(</span><span class="nx">unsafe</span><span class="p">.</span><span class="nf">Pointer</span><span class="p">(</span><span class="nb">uintptr</span><span class="p">(</span><span class="nx">c</span><span class="p">)</span> <span class="o">+</span> <span class="p">(</span><span class="nx">hash</span><span class="o">&amp;</span><span class="nx">m</span><span class="p">)</span><span class="o">*</span><span class="nb">uintptr</span><span class="p">(</span><span class="nx">t</span><span class="p">.</span><span class="nx">bucketsize</span><span class="p">)))</span>
+    <span class="c1">// 如果这桶没被搬走
+</span><span class="c1"></span>    <span class="c1">// 那就遍历这个旧桶
+</span><span class="c1"></span>		<span class="k">if</span> <span class="p">!</span><span class="nf">evacuated</span><span class="p">(</span><span class="nx">oldb</span><span class="p">)</span> <span class="p">{</span>
+			<span class="nx">b</span> <span class="p">=</span> <span class="nx">oldb</span>
+		<span class="p">}</span>
+	<span class="p">}</span>
+  <span class="c1">// 算出高八位
+</span><span class="c1"></span>	<span class="nx">top</span> <span class="o">:=</span> <span class="nf">tophash</span><span class="p">(</span><span class="nx">hash</span><span class="p">)</span>
+<span class="nx">bucketloop</span><span class="p">:</span>
+  <span class="c1">// 遍历桶和其溢出桶
+</span><span class="c1"></span>	<span class="k">for</span> <span class="p">;</span> <span class="nx">b</span> <span class="o">!=</span> <span class="kc">nil</span><span class="p">;</span> <span class="nx">b</span> <span class="p">=</span> <span class="nx">b</span><span class="p">.</span><span class="nf">overflow</span><span class="p">(</span><span class="nx">t</span><span class="p">)</span> <span class="p">{</span>
+    <span class="c1">// 遍历tophash
+</span><span class="c1"></span>		<span class="k">for</span> <span class="nx">i</span> <span class="o">:=</span> <span class="nb">uintptr</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span> <span class="nx">i</span> <span class="p">&lt;</span> <span class="nx">bucketCnt</span><span class="p">;</span> <span class="nx">i</span><span class="o">++</span> <span class="p">{</span>
+			<span class="k">if</span> <span class="nx">b</span><span class="p">.</span><span class="nx">tophash</span><span class="p">[</span><span class="nx">i</span><span class="p">]</span> <span class="o">!=</span> <span class="nx">top</span> <span class="p">{</span>
+				<span class="k">if</span> <span class="nx">b</span><span class="p">.</span><span class="nx">tophash</span><span class="p">[</span><span class="nx">i</span><span class="p">]</span> <span class="o">==</span> <span class="nx">emptyRest</span> <span class="p">{</span>
+					<span class="k">break</span> <span class="nx">bucketloop</span>
+				<span class="p">}</span>
+				<span class="k">continue</span>
+			<span class="p">}</span>
+			<span class="nx">k</span> <span class="o">:=</span> <span class="nf">add</span><span class="p">(</span><span class="nx">unsafe</span><span class="p">.</span><span class="nf">Pointer</span><span class="p">(</span><span class="nx">b</span><span class="p">),</span> <span class="nx">dataOffset</span><span class="o">+</span><span class="nx">i</span><span class="o">*</span><span class="nb">uintptr</span><span class="p">(</span><span class="nx">t</span><span class="p">.</span><span class="nx">keysize</span><span class="p">))</span>
+			<span class="k">if</span> <span class="nx">t</span><span class="p">.</span><span class="nf">indirectkey</span><span class="p">()</span> <span class="p">{</span>
+				<span class="nx">k</span> <span class="p">=</span> <span class="o">*</span><span class="p">((</span><span class="o">*</span><span class="nx">unsafe</span><span class="p">.</span><span class="nx">Pointer</span><span class="p">)(</span><span class="nx">k</span><span class="p">))</span>
+			<span class="p">}</span>
+      <span class="c1">// 找到了！
+</span><span class="c1"></span>			<span class="k">if</span> <span class="nx">t</span><span class="p">.</span><span class="nx">key</span><span class="p">.</span><span class="nf">equal</span><span class="p">(</span><span class="nx">key</span><span class="p">,</span> <span class="nx">k</span><span class="p">)</span> <span class="p">{</span>
+        <span class="c1">// 算出key对应的value
+</span><span class="c1"></span>				<span class="nx">e</span> <span class="o">:=</span> <span class="nf">add</span><span class="p">(</span><span class="nx">unsafe</span><span class="p">.</span><span class="nf">Pointer</span><span class="p">(</span><span class="nx">b</span><span class="p">),</span> <span class="nx">dataOffset</span><span class="o">+</span><span class="nx">bucketCnt</span><span class="o">*</span><span class="nb">uintptr</span><span class="p">(</span><span class="nx">t</span><span class="p">.</span><span class="nx">keysize</span><span class="p">)</span><span class="o">+</span><span class="nx">i</span><span class="o">*</span><span class="nb">uintptr</span><span class="p">(</span><span class="nx">t</span><span class="p">.</span><span class="nx">elemsize</span><span class="p">))</span>
+				<span class="k">if</span> <span class="nx">t</span><span class="p">.</span><span class="nf">indirectelem</span><span class="p">()</span> <span class="p">{</span>
+					<span class="nx">e</span> <span class="p">=</span> <span class="o">*</span><span class="p">((</span><span class="o">*</span><span class="nx">unsafe</span><span class="p">.</span><span class="nx">Pointer</span><span class="p">)(</span><span class="nx">e</span><span class="p">))</span>
+				<span class="p">}</span>
+        <span class="c1">// 返回！
+</span><span class="c1"></span>				<span class="k">return</span> <span class="nx">e</span><span class="p">,</span> <span class="kc">true</span>
+			<span class="p">}</span>
+		<span class="p">}</span>
+	<span class="p">}</span>
+  <span class="c1">//到这了就说明没找到
+</span><span class="c1"></span>    <span class="c1">// 返回对应类型的零值和false
+</span><span class="c1"></span>	<span class="k">return</span> <span class="nx">unsafe</span><span class="p">.</span><span class="nf">Pointer</span><span class="p">(</span><span class="o">&amp;</span><span class="nx">zeroVal</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span> <span class="kc">false</span>
+<span class="p">}</span>
+
+</code></pre></div><h6 id="map读取的总结">Map读取的总结</h6>
+<p>其实map的读取没什么可说的大概就是以下几步：</p>
+<ol>
+<li>nil的Map或者len==0的Map直接返回对应类型零值</li>
+<li>如果当前处于翻倍扩容状态且当前key的hash对应的桶还没搬迁完，那么就在旧桶里找对应的那个桶去找对应的key-value</li>
+<li>跟写入一样 遍历桶及其溢出桶</li>
+<li>找到了返回值，没找到返回返回对应类型零值</li>
+</ol>
+<h2 id="总结-1">总结</h2>
+<p>经过上面的一堆长篇大论，Map的相关东西都已经大概齐的讲完了，还差Map的遍历和清空，但是这两个我打算在未来某天写Range的时候去讲（挖坑，啥时候填不一定），反正大概齐就是这么回事，目前Map主要的坑还是在并发读写的问题上，源代码中也能看得出，对并发读写都做了panic处理，那么如何避免并发读写或者使得Map可以并发的使用，请看我的这篇文章 <a href="https://blog.csdn.net/qq_37005831/article/details/111815704">《「Golang」并发场景下的Map使用方式及避坑指南》</a></p>
+<p>由于我这人不喜欢审稿，写完了就写完了，上面的一些语句或者词汇可能并不是很通顺或者有语病，请各位指出，在此感谢各位，同时也感谢各位能够阅读本篇文章，如果能带给你一些收获是我的荣幸，同时希望能指出文章中的一些问题，或者各位看官的一些见解，让我们一同学习，再次感谢各位！</p>
+]]></content>
+		</item>
 		
 		<item>
 			<title>「Golang」 通道源码解析</title>
