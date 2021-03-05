@@ -7,7 +7,22 @@
     <generator>Hugo -- gohugo.io</generator>
     <language>zh-cn</language>
     <copyright>This work is licensed under a Creative Commons Attribution-NonCommercial 4.0 International License.</copyright>
-    <lastBuildDate>Wed, 27 Jan 2021 00:00:00 +0000</lastBuildDate><atom:link href="http://echoblog.cc/tags/golang/index.xml" rel="self" type="application/rss+xml" />
+    <lastBuildDate>Wed, 03 Mar 2021 00:00:00 +0000</lastBuildDate><atom:link href="http://echoblog.cc/tags/golang/index.xml" rel="self" type="application/rss+xml" />
+    <item>
+      <title>「Golang」for range 使用方法及避坑指南</title>
+      <link>http://echoblog.cc/posts/golangfor-range-%E4%BD%BF%E7%94%A8%E6%96%B9%E6%B3%95%E5%8F%8A%E9%81%BF%E5%9D%91%E6%8C%87%E5%8D%97/</link>
+      <pubDate>Wed, 03 Mar 2021 00:00:00 +0000</pubDate>
+      
+      <guid>http://echoblog.cc/posts/golangfor-range-%E4%BD%BF%E7%94%A8%E6%96%B9%E6%B3%95%E5%8F%8A%E9%81%BF%E5%9D%91%E6%8C%87%E5%8D%97/</guid>
+      <description>[TOC]
+前言 循坏控制结构是一种在各种编程语言中常用的程序控制结构，其与顺序控制结构、选择控制结构组成了程序的控制结构，程序控制结构是指以某种顺序执行的一系列动作，用于解决某个问题。理论和实践证明，无论多复杂的算法均可通过顺序、选择、循环3种基本控制结构构造出来。
+在Go中，提供了两种循环控制结构for和goto，但是后者不推荐使用（原因请查看艾兹格·迪杰斯特拉（Edsger Wybe Dijkstra）在1968年的一篇名称为《GOTO语句有害论》的论文），但是就作者而言goto在某些业务情况下，是很好用的，所以也不需要完全就反对他。
+ 本文代码基于Go 1.16版本，不同版本如有差异请见谅
+ 万能的for循环 在Go中，与c语言（及大部分语言）不同的是，去掉了while,do..while 循环，将其完全简化为for，虽然这样看起来是缺少了很多功能，但是while,do..while 等功能完全可以通过for来实现 。
+接下来，通过几个代码来展示出，for循环，如何实现while,do..while 的相关逻辑。
+func main() { N := 10 for i := 0; i &amp;lt; N; i++ { // TODO 	} for { /* * while true{ *	// TODO *	} * */ } for N &amp;gt; 10 { /* * while N&amp;gt;10 { *	// TODO *	} * */ } for { // TODO 	// do{ 	// TODO 	// }while(N&amp;gt;10)  if N &amp;lt;= 10 { break } } } 代码有些粗糙，望大家见谅，可以看得出来，一个for就可以完成while,do.</description>
+    </item>
+    
     <item>
       <title>「Golang」 Map源码解析</title>
       <link>http://echoblog.cc/posts/golangmap%E8%A7%A3%E6%9E%90/</link>
@@ -146,23 +161,6 @@ sync.Pool 首先针对sync.Pool官方给了一个合理的简述：
       <description>sync.WaitGroup介绍 当我们在开发过程中，经常需要在开启多个goroutine后，等待全部的goroutine执行完毕后才进行下一步的业务逻辑执行。此时我们可能会采用轮询的方式去定时侦测已经开启的多个goroutine的业务是否执行完毕，但是这样性能很低，并且持续占用cpu时间片很消耗cpu的资源，此时我们就该使用sync.WaitGroup来完成此次操作。举个🌰，下列代码是开了10个goroutine后等待其各睡眠5秒之后进行后续操作的sync.WaitGroup方法实现。
 func main() { // 创建对象 	var wait sync.WaitGroup for i := 0; i &amp;lt; 10; i++ { // 为需要等待结束的goroutine数量+1 	wait.Add(1) go func() { time.Sleep(5*time.Second) // 结束 使得需要等待的数量-1 	// 等同于 wait.Add(-1) 	wait.Done() }() } // 等待所有执行完毕 	wait.Wait() fmt.Println(&amp;#34;wait done&amp;#34;) } 上述代码的睡眠5秒可以替换为任何需要在goroutine中执行的业务逻辑，上述代码中出现了下述几个sync.WaitGroup中提供的方法，提供方法很少很简洁，接下来就开始解析一下sync.WaitGroup的相关信息。
 func (wg *WaitGroup) Add(delta int) func (wg *WaitGroup) Done() func (wg *WaitGroup) Wait() sync.WaitGroup源代码解析 1：sync.WaitGroup结构体的解析 type WaitGroup struct { // 一个防止sync.WaitGroup被复制的标记结构体 	noCopy noCopy // 该数组在32为系统与64位系统中代表的用途不同 	// 首先说64位系统： 	// state1[0]代表当前sync.</description>
-    </item>
-    
-    <item>
-      <title>「Golang」不谈底层源码只谈使用，万字长文话说Golang的数组与切片</title>
-      <link>http://echoblog.cc/posts/golang%E4%B8%8D%E8%B0%88%E5%BA%95%E5%B1%82%E6%BA%90%E7%A0%81%E5%8F%AA%E8%B0%88%E4%BD%BF%E7%94%A8%E4%B8%87%E5%AD%97%E9%95%BF%E6%96%87%E8%AF%9D%E8%AF%B4golang%E7%9A%84%E6%95%B0%E7%BB%84%E4%B8%8E%E5%88%87%E7%89%87/</link>
-      <pubDate>Mon, 04 Jan 2021 00:00:00 +0000</pubDate>
-      
-      <guid>http://echoblog.cc/posts/golang%E4%B8%8D%E8%B0%88%E5%BA%95%E5%B1%82%E6%BA%90%E7%A0%81%E5%8F%AA%E8%B0%88%E4%BD%BF%E7%94%A8%E4%B8%87%E5%AD%97%E9%95%BF%E6%96%87%E8%AF%9D%E8%AF%B4golang%E7%9A%84%E6%95%B0%E7%BB%84%E4%B8%8E%E5%88%87%E7%89%87/</guid>
-      <description>作者注：本篇所有代码采用go1.15+版本编写。
- 一、前言 之前一直在写一些同步原语和其他一些东西的的源代码分析，感觉写起来很麻烦，今天开始我决定写几期关于go中常用数据结构的解析、用法以及相关的可能会踩到的坑，正好也当作自己的知识体系巩固，今天开始第一个数据结构的解析&amp;mdash;数组与切片。
-二、数组 1、什么是数组  数组（Array）是有序的元素序列。 若将有限个类型相同的变量的集合命名，那么这个名称为数组名。组成数组的各个变量称为数组的分量，也称为数组的元素，有时也称为下标变量。用于区分数组的各个元素的数字编号称为下标。数组是在程序设计中，为了处理方便， 把具有相同类型的若干元素按有序的形式组织起来的一种形式。 这些有序排列的同类数据元素的集合称为数组。摘自百度百科【数组】
- 也许各位看官是专业的Go开发者，也许是其他语言转来Go的开发者，我想各位从开发程序哪天起，就没少接触数组这个数据结构。如果看官是C/C++开发者，我想对数组的接触就更多了。正如上面的信息所说，数组是一个有序的元素序列，这个元素的类型都是相同的（排除python,php等动态类型检查的语言除外），那么如何说数组是一个有序的元素序列呢？是其保存的数组都是从大到小或者从小到大排序的意思吗？No！有序指的是数组中的每个元素在内存地址中的顺序是相邻的，计算机会为数组分配一块连续的内存来保存其中的元素，我们可以利用数组中元素的索引快速访问特定元素，如下图所示，这是一个数组a，其有四个元素，这四个元素所占的内存位置分别是【0xc000016140,0xc000016148,0xc000016150,0xc000016158】，其间隔为8字节，为什么为8字节呢，因为int类型在64位计算机上的占用空间是8个字节，这就能体现出数组中所谓的有序元素序列的意义。 2、Go中的数组 (1)、数组的初始化 每个语言都有自己的数组的声明和定义方式，再次我就不在叙述了，我要给各位看官介绍的是在Go中的数组相关的声明以及定义的方式，如下代码：
-var a [4]int b := [4]int{1, 2, 3, 4} var c = [4]int{1, 2, 3, 4} d := [...]int{1, 2, 3, 4} 上面三种种方式都没什么问题，跟其他语言都大差不差，主要我们来看第三种，即定义数组d的时候，在[...]符号种间的 ... 是个什么玩意。 d := [...]int{1, 2, 3, 4}这种声明方式，会在编译期间将前面的[...]根据后面的元素个数（比如现在一共4个元素）自动推导成为[4]int{1, 2, 3, 4}，也就是说在编译期间b := [4]int{1, 2, 3, 4}与d := [...]int{1, 2, 3, 4}方式是等同的，只不过变量名是不相同的。
-(2)、数组的元素获取 Go中针对数组元素的获取与其他语言也是相同的，均通过下标获取元素，下标的起始位置也仍然为0，但是要注意的是
- 与C/C++不同的是，虽然Go中数组的首地址即是数组下标为0的元素的地址，但是Go中无法像C/C++中使用数组的首地址进行++的操作，因为Go中不支持地址计算操作（使用unsafe包除外）。
- 数组中如果想获取一个数组的长度，可以使用内置函数len()来获取
-func main() { var a [4]int a[0] = 5 a[1] = 2 a[2] = 5 a[3] = 7 // len 获取数组长度 	fmt.</description>
     </item>
     
   </channel>

@@ -7,7 +7,22 @@
     <generator>Hugo -- gohugo.io</generator>
     <language>zh-cn</language>
     <copyright>This work is licensed under a Creative Commons Attribution-NonCommercial 4.0 International License.</copyright>
-    <lastBuildDate>Wed, 27 Jan 2021 00:00:00 +0000</lastBuildDate><atom:link href="http://echoblog.cc/index.xml" rel="self" type="application/rss+xml" />
+    <lastBuildDate>Wed, 03 Mar 2021 00:00:00 +0000</lastBuildDate><atom:link href="http://echoblog.cc/index.xml" rel="self" type="application/rss+xml" />
+    <item>
+      <title>「Golang」for range 使用方法及避坑指南</title>
+      <link>http://echoblog.cc/posts/golangfor-range-%E4%BD%BF%E7%94%A8%E6%96%B9%E6%B3%95%E5%8F%8A%E9%81%BF%E5%9D%91%E6%8C%87%E5%8D%97/</link>
+      <pubDate>Wed, 03 Mar 2021 00:00:00 +0000</pubDate>
+      
+      <guid>http://echoblog.cc/posts/golangfor-range-%E4%BD%BF%E7%94%A8%E6%96%B9%E6%B3%95%E5%8F%8A%E9%81%BF%E5%9D%91%E6%8C%87%E5%8D%97/</guid>
+      <description>[TOC]
+前言 循坏控制结构是一种在各种编程语言中常用的程序控制结构，其与顺序控制结构、选择控制结构组成了程序的控制结构，程序控制结构是指以某种顺序执行的一系列动作，用于解决某个问题。理论和实践证明，无论多复杂的算法均可通过顺序、选择、循环3种基本控制结构构造出来。
+在Go中，提供了两种循环控制结构for和goto，但是后者不推荐使用（原因请查看艾兹格·迪杰斯特拉（Edsger Wybe Dijkstra）在1968年的一篇名称为《GOTO语句有害论》的论文），但是就作者而言goto在某些业务情况下，是很好用的，所以也不需要完全就反对他。
+ 本文代码基于Go 1.16版本，不同版本如有差异请见谅
+ 万能的for循环 在Go中，与c语言（及大部分语言）不同的是，去掉了while,do..while 循环，将其完全简化为for，虽然这样看起来是缺少了很多功能，但是while,do..while 等功能完全可以通过for来实现 。
+接下来，通过几个代码来展示出，for循环，如何实现while,do..while 的相关逻辑。
+func main() { N := 10 for i := 0; i &amp;lt; N; i++ { // TODO 	} for { /* * while true{ *	// TODO *	} * */ } for N &amp;gt; 10 { /* * while N&amp;gt;10 { *	// TODO *	} * */ } for { // TODO 	// do{ 	// TODO 	// }while(N&amp;gt;10)  if N &amp;lt;= 10 { break } } } 代码有些粗糙，望大家见谅，可以看得出来，一个for就可以完成while,do.</description>
+    </item>
+    
     <item>
       <title>「Golang」 Map源码解析</title>
       <link>http://echoblog.cc/posts/golangmap%E8%A7%A3%E6%9E%90/</link>
@@ -144,17 +159,6 @@ sync.Pool 首先针对sync.Pool官方给了一个合理的简述：
 字段解析 接下来看一下读写锁的源代码实现，首先看一下读写锁的结构体字段以及相关的常量字段的用处
  本文所有源代码版本基于1.15
  type RWMutex struct { w Mutex // 一个互斥锁的字段，用户进行写时加互斥锁 	writerSem uint32 // 一个writer的信号量，类似互斥锁中的信号量 	readerSem uint32 // 一个reader的信号量，类似互斥锁中的信号量 	readerCount int32 // 两种作用，1:标记有多少拿到读锁的reader，2:是否有writer需要竞争 	readerWait int32 // writer需要等待读锁解锁的reader的数量 } const rwmutexMaxReaders = 1 &amp;lt;&amp;lt; 30 // 最大reader的上限。即最多有多少的reader同时能拿到读锁  在标准库中有很多的字段或者变量都是使用位移操作进行一个字段作为多个含义去使用，比如我的【Golang】【标准库】sync.</description>
-    </item>
-    
-    <item>
-      <title>「Golang」sync.WaitGroup源码讲解.md</title>
-      <link>http://echoblog.cc/posts/golangsync.waitgroup%E6%BA%90%E7%A0%81%E8%AE%B2%E8%A7%A3/</link>
-      <pubDate>Mon, 04 Jan 2021 00:00:00 +0000</pubDate>
-      
-      <guid>http://echoblog.cc/posts/golangsync.waitgroup%E6%BA%90%E7%A0%81%E8%AE%B2%E8%A7%A3/</guid>
-      <description>sync.WaitGroup介绍 当我们在开发过程中，经常需要在开启多个goroutine后，等待全部的goroutine执行完毕后才进行下一步的业务逻辑执行。此时我们可能会采用轮询的方式去定时侦测已经开启的多个goroutine的业务是否执行完毕，但是这样性能很低，并且持续占用cpu时间片很消耗cpu的资源，此时我们就该使用sync.WaitGroup来完成此次操作。举个🌰，下列代码是开了10个goroutine后等待其各睡眠5秒之后进行后续操作的sync.WaitGroup方法实现。
-func main() { // 创建对象 	var wait sync.WaitGroup for i := 0; i &amp;lt; 10; i++ { // 为需要等待结束的goroutine数量+1 	wait.Add(1) go func() { time.Sleep(5*time.Second) // 结束 使得需要等待的数量-1 	// 等同于 wait.Add(-1) 	wait.Done() }() } // 等待所有执行完毕 	wait.Wait() fmt.Println(&amp;#34;wait done&amp;#34;) } 上述代码的睡眠5秒可以替换为任何需要在goroutine中执行的业务逻辑，上述代码中出现了下述几个sync.WaitGroup中提供的方法，提供方法很少很简洁，接下来就开始解析一下sync.WaitGroup的相关信息。
-func (wg *WaitGroup) Add(delta int) func (wg *WaitGroup) Done() func (wg *WaitGroup) Wait() sync.WaitGroup源代码解析 1：sync.WaitGroup结构体的解析 type WaitGroup struct { // 一个防止sync.WaitGroup被复制的标记结构体 	noCopy noCopy // 该数组在32为系统与64位系统中代表的用途不同 	// 首先说64位系统： 	// state1[0]代表当前sync.</description>
     </item>
     
   </channel>
